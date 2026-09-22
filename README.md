@@ -63,8 +63,7 @@ CREATE DATABASE restaurante_reservas;
 
 Ejecutar `Base de Datos/restaurante_reservas.sql` sobre esa base.
 
-2. Configurar las credenciales mediante variables de entorno (no se envian
-   contrasenas por codigo):
+2. Configurar las variables de entorno con los datos de acceso a MySQL:
 
 ```
 SYNCHROLIA_DB_HOST=localhost
