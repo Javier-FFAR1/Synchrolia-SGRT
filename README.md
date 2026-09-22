@@ -79,8 +79,3 @@ SYNCHROLIA_DB_NAME=restaurante_reservas
 ```
 python app.py
 ```
-
-## Notas
-
-- Las capturas de pantalla, videos de demostracion y reportes generados no se
-  incluyen en el repositorio (ver `.gitignore`).

@@ -11,8 +11,6 @@ RAIZ = os.path.dirname(os.path.abspath(__file__))
 RECURSOS = os.path.join(RAIZ, "Recursos")
 
 LOGO_PATH = os.path.join(RECURSOS, "logo_marca.png")
-BANNER_LOGIN = os.path.join(RECURSOS, "banner_login.jpg")
-BANNER_DASHBOARD = os.path.join(RECURSOS, "banner_dashboard.jpg")
 
 # Fuente corporativa Raleway (variable: cubre regular, semi/bold, etc.)
 FUENTE_RALEWAY = os.path.join(RECURSOS, "fuentes", "Raleway[wght].ttf")
