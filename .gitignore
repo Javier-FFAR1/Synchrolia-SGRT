@@ -1,0 +1,29 @@
+# Entorno Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Capturas y material de demostracion (no forman parte del codigo fuente)
+capturas/
+capturas_automaticas/
+video_demostrativo.mp4
+
+# Reportes generados por la aplicacion
+Reportes/
+
+# Credenciales y configuracion local
+.env
+*.env
+config_local.json
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# Sistema
+Thumbs.db
+.DS_Store
