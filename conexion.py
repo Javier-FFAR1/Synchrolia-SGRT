@@ -14,6 +14,30 @@ import mysql.connector
 from mysql.connector import Error
 
 
+def _cargar_env(archivo=".env"):
+    """Carga variables CLAVE=VALOR de un archivo .env local (sin dotenv).
+
+    Complementa pero no reemplaza a las variables de entorno del sistema:
+    las variables ya definidas en el entorno tienen prioridad. Ignora lineas
+    vacias y comentarios (que empiecen con '#').
+    """
+    if not os.path.exists(archivo):
+        return
+    with open(archivo, "r", encoding="utf-8") as f:
+        for linea in f:
+            linea = linea.strip()
+            if not linea or linea.startswith("#") or "=" not in linea:
+                continue
+            clave, valor = linea.split("=", 1)
+            clave = clave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            if clave and clave not in os.environ:
+                os.environ[clave] = valor
+
+
+_cargar_env()
+
+
 # Valores por defecto; se sobreescriben con variables de entorno.
 # La contrasena se lee siempre de la variable de entorno SYNCHROLIA_DB_PASSWORD
 # para no exponer credenciales en el repositorio.
