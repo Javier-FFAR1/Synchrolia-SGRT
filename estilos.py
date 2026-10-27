@@ -46,17 +46,19 @@ def cargar_estilos(app: QApplication):
 
     /* --- Botones generales (por defecto azul oscuro) --- */
     QPushButton {{
-        background-color: #1B3A5C;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #24476B, stop:1 #1B3A5C);
         color: white;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 10px 20px;
         font-weight: 700;
         font-size: 13px;
         min-height: 20px;
     }}
     QPushButton:hover {{
-        background-color: #2C5F8A;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #2C5F8A, stop:1 #244F79);
     }}
     QPushButton:pressed {{
         background-color: #0D1B2A;
@@ -68,7 +70,8 @@ def cargar_estilos(app: QApplication):
 
     /* Boton de acento (dorado - acciones principales) */
     QPushButton#acento {{
-        background-color: #D4A843;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #E0B65C, stop:1 #D4A843);
         color: #0D1B2A;
         font-weight: 700;
         border: none;
@@ -82,7 +85,8 @@ def cargar_estilos(app: QApplication):
 
     /* Boton de peligro (rojo - eliminar/cancelar) */
     QPushButton#peligro {{
-        background-color: #BC1515;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #D02828, stop:1 #BC1515);
         color: white;
         font-weight: 700;
         border: none;
@@ -96,7 +100,8 @@ def cargar_estilos(app: QApplication):
 
     /* Boton de exito (verde - confirmar/guardar) */
     QPushButton#exito {{
-        background-color: #4CAF50;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #5CC15F, stop:1 #4CAF50);
         color: white;
         font-weight: 700;
         border: none;
@@ -184,7 +189,8 @@ def cargar_estilos(app: QApplication):
 
     /* Encabezados de tabla */
     QHeaderView::section {{
-        background-color: #1B3A5C;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #24476B, stop:1 #1B3A5C);
         color: white;
         padding: 8px;
         border: none;
@@ -234,18 +240,20 @@ def cargar_estilos(app: QApplication):
     QFrame#tarjeta {{
         background-color: white;
         border: 1px solid #E0E0E0;
-        border-radius: 10px;
+        border-radius: 12px;
         padding: 16px;
     }}
     QFrame#tarjeta_acento {{
-        background-color: #1B3A5C;
-        border-radius: 10px;
+        background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                                          stop:0 #24476B, stop:1 #13293F);
+        border-radius: 12px;
         padding: 16px;
     }}
 
     /* --- Sidebar --- */
     QFrame#sidebar {{
-        background-color: #1B3A5C;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                          stop:0 #1B3A5C, stop:1 #13293F);
         border: none;
     }}
 
