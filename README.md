@@ -10,6 +10,7 @@ Sistema de Gestion de Reservas para Restaurante (SGRT) desarrollado en Python co
 - Configuracion: horarios de atencion, limites de anticipacion por zona, depositos, festivos, usuarios y roles.
 - Reportes PDF (KPIs, reservas por periodo, mesas mas solicitadas).
 - Exportacion a Excel con hoja resumen y detalle editable de reservas.
+- Cliente REST/JSON configurable, listo para integrar la app con un servidor externo.
 - Autenticacion de usuario con contrasena hasheada y roles (Administrador, Recepcionista).
 - Dashboard con indicadores del dia.
 
@@ -25,6 +26,7 @@ Synchrolia/
 ├── report_metrics.py          # KPIs compartidos por PDF y Excel
 ├── report_generator.py        # Reporte PDF con Flowables (ReportLab)
 ├── excel_exporter.py          # Exportacion Excel con openpyxl
+├── api_client.py              # Cliente REST/JSON configurable (requests)
 ├── estilos.py                 # QSS (tema visual) global
 ├── rutas.py                   # Rutas centralizadas a recursos y fuentes
 ├── Recursos/                  # Imagenes (logo, banners) y tipografias
@@ -104,3 +106,39 @@ SYNCHROLIA_DB_NAME=restaurante_reservas
 ```
 python app.py
 ```
+
+## Cliente API REST (opcional)
+
+`api_client.py` implementa el lado cliente de una API REST/JSON y no
+depende de un servidor concreto. La URL base se configura en `.env`:
+
+```
+SYNCHROLIA_API_URL=http://127.0.0.1:8000/api
+```
+
+Si no se define, se usa `http://127.0.0.1:8000/api`. Ejemplo de uso:
+
+```python
+from api_client import ReservasApi
+
+api = ReservasApi()
+api.listar(periodo="Hoy")
+api.obtener(1)
+api.crear({"id_cliente": 1, "id_mesa": 3, "fecha_reserva": "2026-10-26"})
+api.actualizar(1, {"estado": "Confirmada"})
+api.actualizar_parcial(1, {"numero_personas": 4})
+api.eliminar(1)
+api.cerrar()
+```
+
+Endpoints esperados del servidor:
+
+- `GET /reservas?periodo=...`
+- `GET /reservas/{id}`
+- `POST /reservas`
+- `PUT /reservas/{id}`
+- `PATCH /reservas/{id}`
+- `DELETE /reservas/{id}`
+
+Los errores HTTP se reportan con `ApiError` (codigo y datos) y los fallos
+de conexion o timeout con `ApiNoDisponibleError`.
