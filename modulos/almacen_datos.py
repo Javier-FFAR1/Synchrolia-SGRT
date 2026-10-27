@@ -15,6 +15,7 @@ auditoria a nivel de servidor (traslapes, aforo, historial).
 """
 
 import datetime
+import time
 
 from mysql.connector import Error
 
@@ -1008,6 +1009,67 @@ def eliminar_reservas_en_lote(estados=None, solo_pasadas=False):
         return 0
     finally:
         conn.close()
+
+
+def borrar_reservas_por_lotes(ids, tamanio_lote=20, pedir_parada=None,
+                              on_progreso=None, retardo_lote=0.4):
+    """Elimina reservas en lotes con una sola conexion (tarea pesada).
+
+    - Cancela de forma cooperativa comprobando pedir_parada() entre lotes
+      (Sesion 26: Stop Flag -> break, sin terminate()).
+    - Notifica avance via on_progreso(hechas, total) despues de cada lote.
+    - retardo_lote: pausa opcional por lote (segundos) para simular
+      procesamiento pesado y hacer visible la concurrencia (guia 22-26).
+    - NO muta la cache en memoria: devuelve las reservas frescas para que el
+      hilo principal actualice lista_reservas en su propio contexto.
+
+    Devuelve dict {eliminadas, mesas_afectadas, cancelado, nuevas_reservas}.
+    Lanza RuntimeError si no hay conexion; relanza Error de MySQL.
+    """
+    conn = get_conexion()
+    if conn is None:
+        raise RuntimeError("No hay conexion a la base de datos.")
+    ids = [int(i) for i in ids]
+    total = len(ids)
+    eliminadas = 0
+    cancelado = False
+    mesas_afectadas = []
+    try:
+        cur = conn.cursor()
+        ph = ",".join(["%s"] * len(ids))
+        cur.execute(
+            "SELECT DISTINCT m.numero_mesa FROM reservas r "
+            "JOIN mesas m ON r.id_mesa = m.id_mesa "
+            f"WHERE r.id_reserva IN ({ph})", ids
+        )
+        mesas_afectadas = [fila[0] for fila in cur.fetchall()]
+
+        for inicio in range(0, total, tamanio_lote):
+            if pedir_parada is not None and pedir_parada():
+                cancelado = True
+                break
+            lote = ids[inicio:inicio + tamanio_lote]
+            lph = ",".join(["%s"] * len(lote))
+            cur.execute(f"DELETE FROM reservas WHERE id_reserva IN ({lph})", lote)
+            eliminadas += cur.rowcount
+            conn.commit()
+            if retardo_lote > 0:
+                time.sleep(retardo_lote)
+            if on_progreso is not None:
+                on_progreso(min(inicio + len(lote), total), total)
+        cur.close()
+        nuevas_reservas = _cargar_reservas()
+    except Error:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {
+        "eliminadas": eliminadas,
+        "mesas_afectadas": mesas_afectadas,
+        "cancelado": cancelado,
+        "nuevas_reservas": nuevas_reservas,
+    }
 
 
 # ---------------------------------------------------------------------------

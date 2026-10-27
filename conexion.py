@@ -62,7 +62,14 @@ class ConexionBD:
         self.conexion = None
 
     def conectar(self):
-        """Establece y retorna una nueva conexion a la base de datos."""
+        """Establece y retorna una nueva conexion a la base de datos.
+
+        Incluye timeouts de red (conexion/lectura/escritura) para que una
+        caida o cuelgue del servidor MySQL no congele la interfaz de forma
+        indefinida; en particular, permite que la cancelacion cooperativa de
+        un hilo secundario finalice con un error acotado y no con un spinner
+        eterno.
+        """
         try:
             self.conexion = mysql.connector.connect(
                 host=self.host,
@@ -70,6 +77,9 @@ class ConexionBD:
                 password=self.password,
                 database=self.database,
                 port=self.port,
+                connection_timeout=10,
+                read_timeout=45,
+                write_timeout=45,
             )
             if self.conexion.is_connected():
                 return self.conexion

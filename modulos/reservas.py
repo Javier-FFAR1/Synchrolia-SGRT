@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QFrame, QDateEdit, QTimeEdit,
     QAbstractItemView, QDialog, QDialogButtonBox,
-    QGroupBox, QScrollArea
+    QGroupBox, QScrollArea, QProgressBar
 )
 from PySide6.QtCore import Qt, QDate, QTime, Signal
 from PySide6.QtGui import QFont, QColor, QIntValidator
@@ -19,6 +19,7 @@ from PySide6.QtGui import QFont, QColor, QIntValidator
 from modulos.buscador_cliente import BuscadorCliente, BuscadorMesa
 from modulos import almacen_datos
 from modulos.almacen_configuracion import almacen_config
+from modulos.hilos import HiloLimpiarReservas
 
 PRIMARIO = "#1B3A5C"
 SECUNDARIO = "#2C5F8A"
@@ -645,8 +646,24 @@ class DialogoLimpiarReservas(QDialog):
         )
         layout.addWidget(self.lbl_preview)
 
+        # Sesion 25: barra de progreso de la tarea en segundo plano.
+        self.barra_progreso = QProgressBar()
+        self.barra_progreso.setRange(0, 100)
+        self.barra_progreso.setValue(0)
+        self.barra_progreso.setVisible(False)
+        layout.addWidget(self.barra_progreso)
+
         fila_botones = QHBoxLayout()
         fila_botones.addStretch()
+
+        # Sesion 26: boton de detencion cooperativa (Stop Flag).
+        self.btn_detener = QPushButton("Detener Proceso")
+        self.btn_detener.setObjectName("secundario")
+        self.btn_detener.setMinimumHeight(38)
+        self.btn_detener.setVisible(False)
+        self.btn_detener.clicked.connect(self._detener_hilo)
+        fila_botones.addWidget(self.btn_detener)
+
         btn_cancelar = QPushButton("Cancelar")
         btn_cancelar.setObjectName("secundario")
         btn_cancelar.setMinimumHeight(38)
@@ -663,6 +680,15 @@ class DialogoLimpiarReservas(QDialog):
         self.cmb_estado.currentTextChanged.connect(self._actualizar_preview)
         self.chk_pasadas.toggled.connect(self._actualizar_preview)
         self._actualizar_preview()
+
+        # Hilo de tarea pesada (Sesion 23): None mientras no haya limpieza.
+        self.hilo = None
+
+    def reject(self):
+        """Sesion 24: no permite cerrar el dialogo mientras el hilo corre."""
+        if self.hilo is not None and self.hilo.isRunning():
+            return
+        super().reject()
 
     def _estados_seleccion(self):
         texto = self.cmb_estado.currentText()
@@ -682,9 +708,76 @@ class DialogoLimpiarReservas(QDialog):
             f"Se eliminaran {len(ids)} reserva(s)\n({criterio}, {ambito})."
         )
 
+    def _al_iniciar_hilo(self):
+        """Sesion 24: señal started (el boton ya se deshabilita en _ejecutar)."""
+        self.lbl_preview.setText("Purgando reservas en segundo plano...")
+
+    def _al_progreso(self, porcentaje, texto):
+        """Sesion 25: slot receptor thread-safe (solo actualiza la UI)."""
+        self.barra_progreso.setValue(porcentaje)
+        self.lbl_preview.setText(texto)
+
+    def _detener_hilo(self):
+        """Sesion 26: peticion cooperativa; el hilo para en el siguiente lote."""
+        self.btn_detener.setEnabled(False)
+        self.lbl_preview.setText("Deteniendo... se confirmara en el siguiente lote.")
+        if self.hilo is not None:
+            self.hilo.detener()
+
+    def _al_finalizar_hilo(self):
+        """Sesion 24: señal finished (reactiva el dialogo)."""
+        if self.hilo is not None and not self.hilo.isRunning():
+            self.btn_eliminar.setEnabled(bool(self._ids_seleccion()))
+
+    def _al_tarea_finalizada(self, resultado):
+        """Procesa el resultado del hilo en el Main Thread (thread-safe)."""
+        self.btn_detener.setVisible(False)
+        self.barra_progreso.setVisible(False)
+        self.btn_detener.setEnabled(True)
+
+        error = resultado.get("error")
+        if error:
+            QMessageBox.critical(
+                self, "Error", f"No se pudo purgar el historial.\n{error}"
+            )
+            self.btn_eliminar.setEnabled(True)
+            self._actualizar_preview()
+            return
+
+        # La cache en memoria solo se muta aqui (hilo principal).
+        nuevas = resultado.get("nuevas_reservas")
+        if nuevas is not None:
+            almacen_datos.lista_reservas[:] = nuevas
+        for numero in resultado.get("mesas_afectadas", []):
+            almacen_datos._sincronizar_estado_mesa_bd(numero)
+
+        eliminadas = resultado.get("eliminadas", 0)
+        cancelado = resultado.get("cancelado", False)
+        if cancelado:
+            QMessageBox.warning(
+                self, "Proceso detenido",
+                f"Se detuvo la limpieza. Se eliminaron {eliminadas} reserva(s).",
+            )
+            self.accept()
+        elif eliminadas:
+            QMessageBox.information(
+                self, "Limpieza completada",
+                f"Se eliminaron {eliminadas} reserva(s).",
+            )
+            self.accept()
+        else:
+            QMessageBox.warning(
+                self, "Sin cambios",
+                "No se pudo eliminar ninguna reserva.",
+            )
+            self.reject()
+
     def _ejecutar(self):
         ids = self._ids_seleccion()
         if not ids:
+            return
+        # Sesion 24: guarda para evitar ejecuciones duplicadas.
+        if self.hilo is not None and self.hilo.isRunning():
             return
         respuesta = QMessageBox.question(
             self,
@@ -696,20 +789,20 @@ class DialogoLimpiarReservas(QDialog):
         )
         if respuesta != QMessageBox.StandardButton.Yes:
             return
-        eliminadas = almacen_datos.eliminar_reservas_en_lote(
-            self._estados_seleccion(), self.chk_pasadas.isChecked()
-        )
-        if eliminadas:
-            QMessageBox.information(
-                self, "Limpieza completada",
-                f"Se eliminaron {eliminadas} reserva(s)."
-            )
-            self.accept()
-        else:
-            QMessageBox.warning(
-                self, "Sin cambios",
-                "No se pudo eliminar ninguna reserva."
-            )
+
+        self.btn_eliminar.setEnabled(False)
+        self.barra_progreso.setVisible(True)
+        self.barra_progreso.setValue(0)
+        self.btn_detener.setVisible(True)
+        self.btn_detener.setEnabled(True)
+
+        # Sesion 23: arrancar el Worker Thread con start() (nunca run()).
+        self.hilo = HiloLimpiarReservas(ids)
+        self.hilo.started.connect(self._al_iniciar_hilo)
+        self.hilo.progreso.connect(self._al_progreso)
+        self.hilo.tarea_finalizada.connect(self._al_tarea_finalizada)
+        self.hilo.finished.connect(self._al_finalizar_hilo)
+        self.hilo.start()
 
 
 # ============================================================
