@@ -133,7 +133,9 @@ class ReservaRepository:
                 select(ReservaModel)
                 .options(
                     selectinload(ReservaModel.cliente),
-                    selectinload(ReservaModel.mesa),
+                    selectinload(ReservaModel.mesa).selectinload(
+                        MesaModel.ubicacion
+                    ),
                     selectinload(ReservaModel.estado),
                     selectinload(ReservaModel.usuario),
                 )

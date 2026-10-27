@@ -1,6 +1,6 @@
 # Synchrolia SGRT
 
-Sistema de Gestion de Reservas para Restaurante (SGRT) desarrollado en Python con PySide6 (Qt) y MySQL. Proyecto integrador II - UNAN-Leon.
+Sistema de Gestion de Reservas para Restaurante (SGRT) desarrollado en Python con PySide6 (Qt), SQLAlchemy ORM y MySQL. Proyecto integrador II - UNAN-Leon.
 
 ## Caracteristicas
 
@@ -9,6 +9,7 @@ Sistema de Gestion de Reservas para Restaurante (SGRT) desarrollado en Python co
 - Mapa visual de mesas con estado en tiempo real (Libre / Ocupada / Reservada / Mantenimiento).
 - Configuracion: horarios de atencion, limites de anticipacion por zona, depositos, festivos, usuarios y roles.
 - Reportes PDF (KPIs, reservas por periodo, mesas mas solicitadas).
+- Exportacion a Excel con hoja resumen y detalle editable de reservas.
 - Autenticacion de usuario con contrasena hasheada y roles (Administrador, Recepcionista).
 - Dashboard con indicadores del dia.
 
@@ -17,7 +18,13 @@ Sistema de Gestion de Reservas para Restaurante (SGRT) desarrollado en Python co
 ```
 Synchrolia/
 ├── app.py                     # Punto de entrada de la aplicacion
-├── conexion.py                # Capa de conexion a MySQL (clase ConexionBD)
+├── conexion.py                # Conexion nativa a MySQL (clase ConexionBD)
+├── database.py                # Engine y SessionLocal de SQLAlchemy
+├── models.py                  # Modelos ORM (tablas y relaciones)
+├── repository.py              # Repositorio ORM de festivos y reservas
+├── report_metrics.py          # KPIs compartidos por PDF y Excel
+├── report_generator.py        # Reporte PDF con Flowables (ReportLab)
+├── excel_exporter.py          # Exportacion Excel con openpyxl
 ├── estilos.py                 # QSS (tema visual) global
 ├── rutas.py                   # Rutas centralizadas a recursos y fuentes
 ├── Recursos/                  # Imagenes (logo, banners) y tipografias

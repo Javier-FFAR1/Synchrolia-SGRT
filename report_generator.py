@@ -11,7 +11,6 @@ Los datos se obtienen con SQLAlchemy ORM a traves de ReservaRepository y
 MesaRepository; la interfaz PySide6 solo invoca generar_reporte_pdf().
 """
 
-from collections import Counter
 from datetime import datetime
 from html import escape
 
@@ -27,6 +26,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from report_metrics import calcular_kpis, reservas_por_dia, top_mesas
 from repository import MesaRepository, ReservaRepository
 
 ANCHO_UTIL = letter[0] - 108
@@ -45,10 +45,6 @@ PRIMARIO = colors.HexColor(PRIMARIO_HEX)
 BORDE = colors.HexColor("#D9E2EC")
 GRIS_CLARO = colors.HexColor(GRIS_CLARO_HEX)
 GRIS_TEXTO = colors.HexColor(GRIS_TEXTO_HEX)
-
-DIAS_SEMANA = [
-    "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"
-]
 
 COLOR_ESTADO = {
     "Cancelada": ROJO_HEX,
@@ -125,56 +121,6 @@ def _crear_estilos():
             textColor=GRIS_TEXTO,
         ),
     }
-
-
-def _calcular_kpis(reservas, total_mesas):
-    """Calcula los indicadores del periodo a partir de las entidades ORM."""
-    total = len(reservas)
-    canceladas = sum(
-        1 for r in reservas if r.estado.nombre_estado == "Cancelada"
-    )
-    activas = sum(
-        1 for r in reservas
-        if r.estado.nombre_estado in ("Pendiente", "Confirmada")
-    )
-    tasa = (canceladas / total * 100) if total else 0.0
-    ocupacion = (activas / total_mesas * 100) if total_mesas else 0.0
-
-    no_canceladas = [
-        r for r in reservas if r.estado.nombre_estado != "Cancelada"
-    ]
-    conteo_mesas = Counter(r.mesa.numero_mesa for r in no_canceladas)
-    conteo_horas = Counter(
-        r.hora_inicio.strftime("%H:%M") for r in no_canceladas
-    )
-
-    return {
-        "total": total,
-        "tasa_cancelacion": round(tasa, 1),
-        "mesa_top": conteo_mesas.most_common(1)[0][0] if conteo_mesas else "-",
-        "horario_pico": conteo_horas.most_common(1)[0][0] if conteo_horas else "-",
-        "ocupacion_promedio": round(ocupacion),
-        "clientes_frecuentes": len({r.id_cliente for r in reservas}),
-    }
-
-
-def _reservas_por_dia(reservas):
-    """Cuenta reservas no canceladas por dia de la semana."""
-    conteo = {dia: 0 for dia in DIAS_SEMANA}
-    for reserva in reservas:
-        if reserva.estado.nombre_estado == "Cancelada":
-            continue
-        conteo[DIAS_SEMANA[reserva.fecha_reserva.weekday()]] += 1
-    return conteo
-
-
-def _top_mesas(reservas, limite=7):
-    """Devuelve las mesas con mas reservas no canceladas."""
-    no_canceladas = [
-        r for r in reservas if r.estado.nombre_estado != "Cancelada"
-    ]
-    conteo = Counter(r.mesa.numero_mesa for r in no_canceladas)
-    return conteo.most_common(limite)
 
 
 def _estilo_tabla():
@@ -390,13 +336,13 @@ def _construir_story(reservas, periodo, kpis, estilos):
     ancho_top = ANCHO_UTIL * 0.54
     bloque_dias = _bloque(
         "Reservas por día",
-        _tabla_dias(_reservas_por_dia(reservas), estilos, ancho_dias),
+        _tabla_dias(reservas_por_dia(reservas), estilos, ancho_dias),
         ancho_dias,
         estilos,
     )
     bloque_top = _bloque(
         "Top mesas más solicitadas",
-        _tabla_top(_top_mesas(reservas), estilos, ancho_top),
+        _tabla_top(top_mesas(reservas), estilos, ancho_top),
         ancho_top,
         estilos,
     )
@@ -465,7 +411,7 @@ def generar_reporte_pdf(ruta, periodo="Todos", reservas=None):
 
     total_mesas = MesaRepository.contar_todas()
     estilos = _crear_estilos()
-    kpis = _calcular_kpis(reservas, total_mesas)
+    kpis = calcular_kpis(reservas, total_mesas)
     story = _construir_story(reservas, periodo, kpis, estilos)
 
     doc = SimpleDocTemplate(

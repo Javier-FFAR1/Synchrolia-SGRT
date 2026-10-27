@@ -4,7 +4,7 @@ Modulo: Reportes
 Estadisticas e indicadores clave del restaurante.
 Todos los valores se calculan a partir del almacen central de datos (reservas),
 por lo que reflejan la informacion real ingresada y se regeneran al pulsar
-"Generar Reporte". Incluye exportacion a PDF.
+"Generar Reporte". Incluye exportacion a PDF y Excel.
 """
 
 from PySide6.QtWidgets import (
@@ -74,6 +74,12 @@ class PanelReportes(QWidget):
         btn_exportar.setMinimumHeight(36)
         btn_exportar.clicked.connect(self._exportar_pdf)
         layout_filtros.addWidget(btn_exportar)
+
+        btn_excel = QPushButton("Exportar Excel")
+        btn_excel.setObjectName("exito")
+        btn_excel.setMinimumHeight(36)
+        btn_excel.clicked.connect(self._exportar_excel)
+        layout_filtros.addWidget(btn_excel)
 
         layout_filtros.addStretch()
         layout.addLayout(layout_filtros)
@@ -288,5 +294,36 @@ class PanelReportes(QWidget):
 
         QMessageBox.information(
             self, "PDF Exportado",
+            f"Reporte guardado en:\n{ruta}"
+        )
+
+    def _exportar_excel(self):
+        """Genera un libro Excel con resumen y detalle desde los datos ORM."""
+        ruta, _ = QFileDialog.getSaveFileName(
+            self, "Guardar Reporte Excel", "reporte_synchrolia.xlsx",
+            "Excel (*.xlsx)"
+        )
+        if not ruta:
+            return
+
+        try:
+            from excel_exporter import exportar_reservas_excel
+            exportar_reservas_excel(ruta, self.cmb_periodo.currentText())
+        except ImportError:
+            QMessageBox.information(
+                self, "Exportar Excel",
+                "La libreria 'openpyxl' no esta instalada. "
+                "Instalela con: pip install openpyxl"
+            )
+            return
+        except Exception as error:
+            QMessageBox.critical(
+                self, "Error al exportar Excel",
+                f"No se pudo generar el reporte:\n{error}"
+            )
+            return
+
+        QMessageBox.information(
+            self, "Excel Exportado",
             f"Reporte guardado en:\n{ruta}"
         )
