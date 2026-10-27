@@ -12,8 +12,10 @@ version en memoria para que el panel de configuracion no cambie.
 import datetime
 
 from mysql.connector import Error
+from sqlalchemy.exc import SQLAlchemyError
 
 from conexion import get_conexion
+from repository import FestivoRepository
 
 
 DIAS_SEMANA = [
@@ -53,12 +55,6 @@ ZONA_ANTICIPACION_DEFECTO = {
     "requiere_deposito": False,
     "porcentaje_deposito": 30,
 }
-
-
-def _fecha_a_bd(fecha_ui):
-    """'dd/mm/yyyy' -> 'yyyy-mm-dd'"""
-    d, m, y = fecha_ui.split("/")
-    return f"{y}-{m}-{d}"
 
 
 def _fecha_a_ui(fecha_bd):
@@ -337,26 +333,19 @@ class AlmacenConfiguracion:
     # ---------------- Festivos ----------------
 
     def obtener_festivos(self):
-        """Devuelve una copia de los festivos desde dias_festivos."""
-        conn = get_conexion()
-        if conn is None:
-            return []
+        """Devuelve los festivos desde dias_festivos usando el repositorio ORM."""
         try:
-            cur = conn.cursor()
-            cur.execute(
-                """SELECT fecha, COALESCE(descripcion, ''), accion
-                   FROM dias_festivos ORDER BY fecha"""
-            )
-            festivos = [
-                {"fecha": _fecha_a_ui(fila[0]), "descripcion": fila[1], "accion": fila[2]}
-                for fila in cur.fetchall()
-            ]
-            cur.close()
-            return festivos
-        except Error:
+            festivos = FestivoRepository.obtener_todos()
+        except SQLAlchemyError:
             return []
-        finally:
-            conn.close()
+        return [
+            {
+                "fecha": _fecha_a_ui(festivo.fecha),
+                "descripcion": festivo.descripcion or "",
+                "accion": festivo.accion,
+            }
+            for festivo in festivos
+        ]
 
     def agregar_festivo(self, fecha, descripcion, accion):
         """Agrega un festivo. Devuelve (True, None) o (False, error)."""
@@ -366,32 +355,22 @@ class AlmacenConfiguracion:
         if not self._fecha_valida(fecha):
             return False, "La fecha debe tener el formato DD/MM/AAAA y ser una fecha real."
         dia, mes, anio = (int(p) for p in fecha.split("/"))
-        if datetime.date(anio, mes, dia) < datetime.date.today():
+        fecha_bd = datetime.date(anio, mes, dia)
+        if fecha_bd < datetime.date.today():
             return False, (
                 "No se puede registrar un festivo en el pasado.\n"
                 "Use la fecha de hoy o una fecha futura."
             )
-        conn = get_conexion()
-        if conn is None:
-            return False, "No hay conexion a la base de datos."
         try:
-            cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM dias_festivos WHERE fecha = %s", (_fecha_a_bd(fecha),))
-            if cur.fetchone()[0] > 0:
-                cur.close()
+            if FestivoRepository.existe(fecha_bd):
                 return False, f"Ya existe un festivo el {fecha}."
-            cur.execute(
-                """INSERT INTO dias_festivos (fecha, descripcion, accion)
-                   VALUES (%s, %s, %s)""",
-                (_fecha_a_bd(fecha), descripcion.strip() or "Festivo", accion),
-            )
-            conn.commit()
-            cur.close()
-            return True, None
-        except Error as e:
+            if FestivoRepository.crear(
+                fecha_bd, descripcion.strip() or "Festivo", accion
+            ):
+                return True, None
+            return False, "No se pudo guardar el festivo en la base de datos."
+        except SQLAlchemyError as e:
             return False, f"Error al agregar el festivo: {e}"
-        finally:
-            conn.close()
 
     @staticmethod
     def _fecha_valida(fecha):
@@ -407,21 +386,14 @@ class AlmacenConfiguracion:
             return False
 
     def eliminar_festivo(self, fecha):
-        """Elimina un festivo por su fecha. Devuelve bool."""
-        conn = get_conexion()
-        if conn is None:
+        """Elimina un festivo por su fecha usando el repositorio ORM."""
+        if not self._fecha_valida(fecha):
             return False
+        dia, mes, anio = (int(p) for p in fecha.split("/"))
         try:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM dias_festivos WHERE fecha = %s", (_fecha_a_bd(fecha),))
-            conn.commit()
-            ok = cur.rowcount > 0
-            cur.close()
-            return ok
-        except Error:
+            return FestivoRepository.eliminar(datetime.date(anio, mes, dia))
+        except SQLAlchemyError:
             return False
-        finally:
-            conn.close()
 
 
 # Punto de acceso global compartido por toda la aplicacion
