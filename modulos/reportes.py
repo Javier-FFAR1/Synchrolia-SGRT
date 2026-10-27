@@ -7,9 +7,6 @@ por lo que reflejan la informacion real ingresada y se regeneran al pulsar
 "Generar Reporte". Incluye exportacion a PDF.
 """
 
-import os
-from datetime import datetime, date
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFrame, QGridLayout, QTableWidget, QTableWidgetItem,
@@ -265,11 +262,16 @@ class PanelReportes(QWidget):
         )
 
     def _exportar_pdf(self):
-        """Genera y guarda un PDF con el reporte actual."""
+        """Genera un PDF detallado con Flowables a partir de los datos ORM."""
+        ruta, _ = QFileDialog.getSaveFileName(
+            self, "Guardar Reporte PDF", "reporte_synchrolia.pdf", "PDF (*.pdf)"
+        )
+        if not ruta:
+            return
+
         try:
-            from reportlab.lib.pagesizes import letter
-            from reportlab.lib.units import inch
-            from reportlab.pdfgen import canvas
+            from report_generator import generar_reporte_pdf
+            generar_reporte_pdf(ruta, self.cmb_periodo.currentText())
         except ImportError:
             QMessageBox.information(
                 self, "Exportar PDF",
@@ -277,72 +279,13 @@ class PanelReportes(QWidget):
                 "Instalela con: pip install reportlab"
             )
             return
-
-        ruta, _ = QFileDialog.getSaveFileName(
-            self, "Guardar Reporte PDF", "reporte_synchrolia.pdf", "PDF (*.pdf)"
-        )
-        if not ruta:
+        except Exception as error:
+            QMessageBox.critical(
+                self, "Error al exportar PDF",
+                f"No se pudo generar el reporte:\n{error}"
+            )
             return
 
-        periodo = self.cmb_periodo.currentText()
-        kpis = reportes_kpis(periodo)
-        dias = reportes_dias(periodo)
-        top = reportes_top_mesas(7, periodo)
-
-        c = canvas.Canvas(ruta, pagesize=letter)
-        w, h = letter
-
-        c.setFillColorRGB(0.11, 0.23, 0.36)
-        c.setFont("Helvetica-Bold", 20)
-        c.drawString(inch, h - 0.9 * inch, "Synchrolia SGRT - Reporte de Reservas")
-        c.setFont("Helvetica", 10)
-        c.setFillColorRGB(0.35, 0.35, 0.35)
-        c.drawString(inch, h - 1.2 * inch, f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-        c.drawString(inch, h - 1.35 * inch, f"Periodo: {periodo}")
-
-        y = h - 1.8 * inch
-        c.setFillColorRGB(0.11, 0.23, 0.36)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawString(inch, y, "Indicadores Clave")
-        y -= 0.3 * inch
-
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(0.1, 0.1, 0.1)
-        filas_kpi = [
-            ("Reservas", str(kpis["reservas_semana"])),
-            ("Tasa de cancelacion", f"{kpis['tasa_cancelacion']}%"),
-            ("Mesa mas solicitada", str(kpis["mesa_top"])),
-            ("Horario pico", str(kpis["horario_pico"])),
-            ("Ocupacion promedio", f"{kpis['ocupacion_promedio']}%"),
-            ("Clientes frecuentes", str(kpis["clientes_frecuentes"])),
-        ]
-        for k, v in filas_kpi:
-            c.drawString(inch + 20, y, f"{k}: {v}")
-            y -= 0.25 * inch
-
-        y -= 0.2 * inch
-        c.setFillColorRGB(0.11, 0.23, 0.36)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawString(inch, y, "Reservas por Dia")
-        y -= 0.28 * inch
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(0.1, 0.1, 0.1)
-        for dia, total in dias.items():
-            c.drawString(inch + 20, y, f"{dia}: {total}")
-            y -= 0.22 * inch
-
-        y -= 0.2 * inch
-        c.setFillColorRGB(0.11, 0.23, 0.36)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawString(inch, y, "Top Mesas")
-        y -= 0.28 * inch
-        c.setFont("Helvetica", 11)
-        c.setFillColorRGB(0.1, 0.1, 0.1)
-        for i, (mesa, total) in enumerate(top, start=1):
-            c.drawString(inch + 20, y, f"{i}. Mesa {mesa}: {total} reservas")
-            y -= 0.22 * inch
-
-        c.save()
         QMessageBox.information(
             self, "PDF Exportado",
             f"Reporte guardado en:\n{ruta}"
