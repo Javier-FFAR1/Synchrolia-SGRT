@@ -6,10 +6,6 @@ __pycache__/
 venv/
 env/
 
-# Capturas y material de demostracion (no forman parte del codigo fuente)
-capturas/
-capturas_automaticas/
-video_demostrativo.mp4
 
 # Reportes generados por la aplicacion
 Reportes/

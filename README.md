@@ -45,12 +45,29 @@ Synchrolia/
 
 - Python 3.10+
 - MySQL 8.x
-- PySide6, mysql-connector-python
+- Git
 
-Instalar dependencias:
+## Instalacion para el equipo
+
+1. Clonar el repositorio:
 
 ```
-pip install PySide6 mysql-connector-python
+git clone https://github.com/Javier-FFAR1/Synchrolia-SGRT.git
+cd Synchrolia-SGRT
+```
+
+2. Crear y activar un entorno virtual:
+
+```
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # Linux / macOS
+```
+
+3. Instalar dependencias:
+
+```
+pip install -r requirements.txt
 ```
 
 ## Base de datos
@@ -63,7 +80,7 @@ CREATE DATABASE restaurante_reservas;
 
 Ejecutar `Base de Datos/restaurante_reservas.sql` sobre esa base.
 
-2. Configurar las variables de entorno con los datos de acceso a MySQL:
+2. Crear un archivo `.env` en la raiz del proyecto con los datos de acceso a MySQL:
 
 ```
 SYNCHROLIA_DB_HOST=localhost
@@ -72,6 +89,8 @@ SYNCHROLIA_DB_USER=root
 SYNCHROLIA_DB_PASSWORD=tu_contrasena
 SYNCHROLIA_DB_NAME=restaurante_reservas
 ```
+
+> El archivo `.env` esta en `.gitignore`: nunca subas tus credenciales al repositorio.
 
 ## Ejecucion
 
