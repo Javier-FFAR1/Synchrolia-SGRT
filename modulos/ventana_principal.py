@@ -9,10 +9,12 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QLabel, QPushButton, QStackedWidget, QSizePolicy, QScrollArea
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QIcon, QPixmap
 
 from rutas import LOGO_PATH
+from modulos import almacen_datos
+from modulos import notificaciones
 from modulos.dashboard import PanelDashboard
 from modulos.reservas import PanelReservas
 from modulos.mesas import PanelMesas
@@ -78,6 +80,12 @@ class VentanaPrincipal(QMainWindow):
 
         self._construir_interfaz()
 
+        self._timer_reservas = QTimer(self)
+        self._timer_reservas.setInterval(60_000)
+        self._timer_reservas.timeout.connect(self._procesar_reservas_automaticas)
+        self._timer_reservas.start()
+        self._procesar_reservas_automaticas()
+
     def _construir_interfaz(self):
         widget_central = QWidget()
         self.setCentralWidget(widget_central)
@@ -100,7 +108,7 @@ class VentanaPrincipal(QMainWindow):
         """)
 
         layout_sidebar = QVBoxLayout(sidebar)
-        layout_sidebar.setContentsMargins(12, 16, 12, 16)
+        layout_sidebar.setContentsMargins(12, 12, 12, 12)
         layout_sidebar.setSpacing(4)
 
         # Logo de la marca en el sidebar
@@ -108,13 +116,13 @@ class VentanaPrincipal(QMainWindow):
         pixmap_marca = QPixmap(LOGO_PATH)
         lbl_marca.setPixmap(
             pixmap_marca.scaled(
-                170, 170,
+                150, 150,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation
             )
         )
         lbl_marca.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_marca.setFixedHeight(180)
+        lbl_marca.setFixedHeight(160)
         layout_sidebar.addWidget(lbl_marca)
 
         # Nombre de la marca en mayusculas bajo el logo
@@ -159,9 +167,11 @@ class VentanaPrincipal(QMainWindow):
             or not permisos_requeridos[m].isdisjoint(permisos)
         ]
 
+        etiquetas_menu = {"Configuracion": "Configuración"}
+
         self.botones_nav = []
         for indice, texto in enumerate(modulos):
-            btn = BotonSidebar("  " + texto)
+            btn = BotonSidebar("  " + etiquetas_menu.get(texto, texto))
             btn.clicked.connect(lambda checked, i=indice: self._navegar(i))
             layout_sidebar.addWidget(btn)
             self.botones_nav.append(btn)
@@ -195,11 +205,17 @@ class VentanaPrincipal(QMainWindow):
         layout_datos_usuario.setSpacing(2)
 
         lbl_usuario = QLabel(self.nombre_usuario)
-        lbl_usuario.setStyleSheet("color: white; font-size: 12px; font-weight: 600;")
+        lbl_usuario.setStyleSheet(
+            "color: white; font-size: 12px; font-weight: 600; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
+        )
         layout_datos_usuario.addWidget(lbl_usuario)
 
         lbl_rol = QLabel(self.rol)
-        lbl_rol.setStyleSheet("color: #D4A843; font-size: 10px;")
+        lbl_rol.setStyleSheet(
+            "color: #D4A843; font-size: 10px; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
+        )
         layout_datos_usuario.addWidget(lbl_rol)
 
         layout_usuario.addLayout(layout_datos_usuario)
@@ -209,14 +225,14 @@ class VentanaPrincipal(QMainWindow):
         layout_sidebar.addSpacing(8)
 
         btn_perfil = QPushButton("  Mi Perfil")
-        btn_perfil.setObjectName("acento")
+        btn_perfil.setObjectName("perfil_sidebar")
         btn_perfil.setMinimumHeight(36)
         btn_perfil.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_perfil.clicked.connect(self._abrir_perfil)
         layout_sidebar.addWidget(btn_perfil)
 
-        btn_cerrar = QPushButton("  Cerrar Sesion")
-        btn_cerrar.setObjectName("peligro")
+        btn_cerrar = QPushButton("  Cerrar Sesión")
+        btn_cerrar.setObjectName("cerrar_sidebar")
         btn_cerrar.setMinimumHeight(36)
         btn_cerrar.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_cerrar.clicked.connect(self._cerrar_sesion)
@@ -315,6 +331,20 @@ class VentanaPrincipal(QMainWindow):
         if self.stack_contenido.currentWidget() is getattr(self, "panel_mesas", None):
             self.panel_mesas._refrescar_mapa()
 
+    def _procesar_reservas_automaticas(self):
+        """Cancela reservas vencidas y refresca las vistas dependientes del tiempo."""
+        resultado = almacen_datos.procesar_reservas_vencidas()
+        notificaciones.procesar_recordatorios(almacen_datos.lista_reservas)
+
+        if self.panel_reservas is not None and resultado.get("total"):
+            self.panel_reservas._aplicar_filtro()
+        if self.panel_reportes is not None and resultado.get("total"):
+            self.panel_reportes._actualizar_reporte()
+        if self.panel_mesas is not None:
+            self.panel_mesas._refrescar_mapa()
+        if self.panel_dashboard is not None:
+            self.panel_dashboard._actualizar_contenido()
+
     def _abrir_perfil(self):
         """Abre el dialogo de perfil y gestiona la eliminacion de cuenta."""
         from modulos.dialogo_perfil import DialogoPerfil
@@ -337,8 +367,8 @@ class VentanaPrincipal(QMainWindow):
         from PySide6.QtWidgets import QMessageBox
         respuesta = QMessageBox.question(
             self,
-            "Cerrar Sesion",
-            "Desea cerrar la sesion actual?",
+            "Cerrar Sesión",
+            "¿Desea cerrar la sesión actual?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

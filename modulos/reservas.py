@@ -17,7 +17,10 @@ from PySide6.QtCore import Qt, QDate, QTime, Signal
 from PySide6.QtGui import QFont, QColor, QIntValidator
 
 from modulos.buscador_cliente import BuscadorCliente, BuscadorMesa
+from modulos.delegados import BadgeEstadoDelegate
+from modulos.mesas import NOMBRES_ZONA
 from modulos import almacen_datos
+from modulos import notificaciones
 from modulos.almacen_configuracion import almacen_config
 from modulos.hilos import HiloLimpiarReservas
 
@@ -29,6 +32,7 @@ ROJO = "#BC1515"
 NARANJA = "#FF9800"
 GRIS = "#9E9E9E"
 NEUTRO_CLARO = "#F5F5F5"
+DIAS_VISIBLES = {"Miercoles": "Miércoles", "Sabado": "Sábado"}
 
 
 # ============================================================
@@ -159,7 +163,8 @@ class DialogoReserva(QDialog):
         # Se construye desde el catalogo central MESAS (fuente unica) para que
         # las mesas y sus zonas/capacidades sean siempre correctas.
         self.cmb_mesa = BuscadorMesa([
-            f"{m['numero']} - {m['capacidad']}p - {m['zona']}"
+            f"{m['numero']} - {m['capacidad']}p - "
+            f"{NOMBRES_ZONA.get(m['zona'], m['zona'])}"
             for m in almacen_datos.MESAS
         ])
         form.addRow("Mesa:", self.cmb_mesa)
@@ -361,7 +366,9 @@ class DialogoReserva(QDialog):
         personas = self.txt_personas.text().strip()
 
         if not personas:
-            QMessageBox.warning(self, "Campo requerido", "Debe ingresar el numero de personas.")
+            QMessageBox.warning(
+                self, "Campo requerido", "Debe ingresar el número de personas."
+            )
             self.txt_personas.setFocus()
             return
 
@@ -372,8 +379,8 @@ class DialogoReserva(QDialog):
         except ValueError:
             QMessageBox.warning(
                 self,
-                "Valor invalido",
-                f"El numero de personas debe ser un entero entre 1 y {self.max_personas}."
+                "Valor inválido",
+                f"El número de personas debe ser un entero entre 1 y {self.max_personas}."
             )
             self.txt_personas.setFocus()
             return
@@ -391,7 +398,7 @@ class DialogoReserva(QDialog):
         if self.time_fin.time() <= self.time_inicio.time():
             QMessageBox.warning(
                 self,
-                "Horario invalido",
+                "Horario inválido",
                 "La hora de fin debe ser posterior a la hora de inicio."
             )
             return
@@ -401,7 +408,7 @@ class DialogoReserva(QDialog):
         if self.date_reserva.date().toPython() < date.today():
             QMessageBox.warning(
                 self,
-                "Fecha invalida",
+                "Fecha inválida",
                 "No se puede registrar una reserva con una fecha pasada.\n"
                 "Seleccione la fecha de hoy o una fecha futura."
             )
@@ -425,8 +432,8 @@ class DialogoReserva(QDialog):
                         self,
                         "Horario ya pasado",
                         f"No se puede registrar la reserva para hoy a las {hora_ini}, "
-                        "esa hora ya transcurrio.\n\n"
-                        f"Hora minima permitida: {umbral}."
+                        "esa hora ya transcurrió.\n\n"
+                        f"Hora mínima permitida: {umbral}."
                     )
                     return
         zona = self._zona_de_mesa(mesa)
@@ -440,20 +447,22 @@ class DialogoReserva(QDialog):
                     detalle = f" ({festivo['descripcion']})"
                 QMessageBox.warning(
                     self,
-                    "Dia festivo",
-                    f"El {fecha} es un dia festivo{detalle}.\n"
-                    "No se pueden registrar reservas ese dia."
+                    "Día festivo",
+                    f"El {fecha} es un día festivo{detalle}.\n"
+                    "No se pueden registrar reservas ese día."
                 )
                 return
 
         # Dia cerrado segun horarios de atencion
         hor = self._horario_para_fecha(fecha_q)
+        nombre_dia = self._nombre_dia_semana(fecha_q.dayOfWeek())
+        dia_visible = DIAS_VISIBLES.get(nombre_dia, nombre_dia)
         if hor and hor.get("cerrado"):
             QMessageBox.warning(
                 self,
                 "Restaurante cerrado",
-                f"El restaurante esta cerrado los {self._nombre_dia_semana(fecha_q.dayOfWeek())}.\n"
-                "Seleccione otro dia de la semana."
+                f"El restaurante está cerrado los {dia_visible}.\n"
+                "Seleccione otro día de la semana."
             )
             return
 
@@ -462,9 +471,9 @@ class DialogoReserva(QDialog):
             if hora_ini < hor["apertura"] or hora_fin > hor["cierre"]:
                 QMessageBox.warning(
                     self,
-                    "Fuera del horario de atencion",
+                    "Fuera del horario de atención",
                     f"El restaurante atiende los "
-                    f"{self._nombre_dia_semana(fecha_q.dayOfWeek())} "
+                    f"{dia_visible} "
                     f"de {hor['apertura']} a {hor['cierre']}.\n"
                     f"Seleccione un horario dentro de ese rango "
                     f"(inicio {hora_ini} / fin {hora_fin})."
@@ -484,10 +493,10 @@ class DialogoReserva(QDialog):
         if dias_anticipacion > max_dias_zona:
             QMessageBox.warning(
                 self,
-                "Demasiada anticipacion",
-                f"La zona {zona} solo admite reservas hasta "
-                f"{max_dias_zona} dias de anticipacion.\n"
-                f"La fecha seleccionada esta a {dias_anticipacion} dias."
+                "Demasiada anticipación",
+                f"La zona {NOMBRES_ZONA.get(zona, zona)} solo admite reservas hasta "
+                f"{max_dias_zona} días de anticipación.\n"
+                f"La fecha seleccionada está a {dias_anticipacion} días."
             )
             return
 
@@ -501,26 +510,27 @@ class DialogoReserva(QDialog):
             if not requiere_deposito:
                 QMessageBox.warning(
                     self,
-                    "Supera el limite estandar",
+                    "Supera el límite estándar",
                     f"Las reservas se aceptan con hasta "
-                    f"{self.dias_estandar} dias de anticipacion.\n"
-                    f"La zona {zona} no admite anticipaciones mayores."
+                    f"{self.dias_estandar} días de anticipación.\n"
+                    f"La zona {NOMBRES_ZONA.get(zona, zona)} no admite "
+                    "anticipaciones mayores."
                 )
                 return
             respuesta = QMessageBox.question(
                 self,
-                "Deposito requerido",
-                f"La reserva excede el limite estandar de "
-                f"{self.dias_estandar} dias de anticipacion.\n\n"
-                f"La zona {zona} exige un deposito del {pct}% "
+                "Depósito requerido",
+                f"La reserva excede el límite estándar de "
+                f"{self.dias_estandar} días de anticipación.\n\n"
+                f"La zona {NOMBRES_ZONA.get(zona, zona)} exige un depósito del {pct}% "
                 "(no reembolsable) para asegurar la fecha.\n\n"
-                "Desea continuar y registrar la reserva?",
+                "¿Desea continuar y registrar la reserva?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
             if respuesta != QMessageBox.StandardButton.Yes:
                 return
-            self._nota_deposito = f"Requiere deposito del {pct}% (no reembolsable)."
+            self._nota_deposito = f"Requiere depósito del {pct}% (no reembolsable)."
         else:
             self._nota_deposito = ""
 
@@ -547,7 +557,7 @@ class DialogoReserva(QDialog):
             QMessageBox.warning(
                 self,
                 "Local lleno",
-                "No hay mesas disponibles para ese dia y horario: "
+                "No hay mesas disponibles para ese día y horario: "
                 "el restaurante se encuentra lleno.\n\n"
                 "No es posible registrar la reserva. Intente con otra fecha u horario."
             )
@@ -612,7 +622,7 @@ class DialogoLimpiarReservas(QDialog):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(12)
 
-        lbl_titulo = QLabel("Eliminacion en lote de reservas")
+        lbl_titulo = QLabel("Eliminación en lote de reservas")
         lbl_titulo.setStyleSheet(
             f"font-size: 16px; font-weight: 700; color: {PRIMARIO};"
         )
@@ -705,7 +715,7 @@ class DialogoLimpiarReservas(QDialog):
         criterio = self.cmb_estado.currentText().lower()
         ambito = "fechas pasadas" if self.chk_pasadas.isChecked() else "todas las fechas"
         self.lbl_preview.setText(
-            f"Se eliminaran {len(ids)} reserva(s)\n({criterio}, {ambito})."
+            f"Se eliminarán {len(ids)} reserva(s)\n({criterio}, {ambito})."
         )
 
     def _al_iniciar_hilo(self):
@@ -720,7 +730,7 @@ class DialogoLimpiarReservas(QDialog):
     def _detener_hilo(self):
         """Sesion 26: peticion cooperativa; el hilo para en el siguiente lote."""
         self.btn_detener.setEnabled(False)
-        self.lbl_preview.setText("Deteniendo... se confirmara en el siguiente lote.")
+        self.lbl_preview.setText("Deteniendo... se confirmará en el siguiente lote.")
         if self.hilo is not None:
             self.hilo.detener()
 
@@ -781,9 +791,9 @@ class DialogoLimpiarReservas(QDialog):
             return
         respuesta = QMessageBox.question(
             self,
-            "Confirmar eliminacion en lote",
-            f"Desea eliminar {len(ids)} reserva(s)?\n\n"
-            "Esta accion no se puede deshacer.",
+            "Confirmar eliminación en lote",
+            f"¿Desea eliminar {len(ids)} reserva(s)?\n\n"
+            "Esta acción no se puede deshacer.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -848,7 +858,7 @@ class PanelReservas(QWidget):
         layout_encabezado = QHBoxLayout()
 
         izquierda = QVBoxLayout()
-        lbl_titulo = QLabel("Gestion de Reservas")
+        lbl_titulo = QLabel("Gestión de Reservas")
         lbl_titulo.setObjectName("titulo")
         izquierda.addWidget(lbl_titulo)
 
@@ -916,90 +926,114 @@ class PanelReservas(QWidget):
 
         # Configurar encabezados
         header = self.tabla.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(0, 78)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(2, 86)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(3, 108)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(4, 84)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 84)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(6, 132)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(7, 88)
+        for columna in range(self.tabla.columnCount()):
+            item = self.tabla.horizontalHeaderItem(columna)
+            if item is not None:
+                alineacion = (
+                    Qt.AlignmentFlag.AlignLeft
+                    if columna == 1
+                    else Qt.AlignmentFlag.AlignCenter
+                )
+                item.setTextAlignment(
+                    alineacion | Qt.AlignmentFlag.AlignVCenter
+                )
 
         # Configurar comportamiento de seleccion
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tabla.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tabla.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tabla.verticalHeader().setVisible(False)
+        self.tabla.verticalHeader().setDefaultSectionSize(38)
         self.tabla.setAlternatingRowColors(True)
         self.tabla.setMinimumHeight(300)
+        self.tabla.setItemDelegateForColumn(6, BadgeEstadoDelegate(self.tabla))
+        self.tabla.itemSelectionChanged.connect(self._actualizar_acciones)
 
         # Doble clic para editar
         self.tabla.doubleClicked.connect(self._editar_reserva)
 
-        layout.addWidget(self.tabla)
+        layout.addWidget(self.tabla, 1)
 
         # ============================================================
         # BOTONES DE ACCION INFERIORES
         # ============================================================
         layout_acciones = QHBoxLayout()
-        layout_acciones.setSpacing(12)
+        layout_acciones.setSpacing(8)
 
-        btn_ver = QPushButton("Ver Detalle")
-        btn_ver.setObjectName("secundario")
-        btn_ver.setMinimumHeight(40)
-        btn_ver.setMinimumWidth(140)
-        btn_ver.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_ver.clicked.connect(self._ver_detalle)
-        layout_acciones.addWidget(btn_ver)
+        self.btn_ver = QPushButton("Ver Detalle")
+        self.btn_ver.setObjectName("secundario")
+        self.btn_ver.setMinimumHeight(38)
+        self.btn_ver.setMinimumWidth(130)
+        self.btn_ver.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ver.clicked.connect(self._ver_detalle)
+        layout_acciones.addWidget(self.btn_ver)
 
-        btn_editar = QPushButton("Editar")
-        btn_editar.setMinimumHeight(40)
-        btn_editar.setMinimumWidth(120)
-        btn_editar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_editar.clicked.connect(self._editar_reserva)
-        layout_acciones.addWidget(btn_editar)
+        self.btn_editar = QPushButton("Editar")
+        self.btn_editar.setObjectName("secundario")
+        self.btn_editar.setMinimumHeight(38)
+        self.btn_editar.setMinimumWidth(100)
+        self.btn_editar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_editar.clicked.connect(self._editar_reserva)
+        layout_acciones.addWidget(self.btn_editar)
 
-        btn_confirmar = QPushButton("Confirmar")
-        btn_confirmar.setObjectName("exito")
-        btn_confirmar.setMinimumHeight(40)
-        btn_confirmar.setMinimumWidth(120)
-        btn_confirmar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_confirmar.clicked.connect(self._confirmar_reserva)
-        layout_acciones.addWidget(btn_confirmar)
+        layout_acciones.addSpacing(12)
 
-        btn_completar = QPushButton("Completar")
-        btn_completar.setObjectName("exito")
-        btn_completar.setMinimumHeight(40)
-        btn_completar.setMinimumWidth(120)
-        btn_completar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_completar.clicked.connect(self._completar_reserva)
-        layout_acciones.addWidget(btn_completar)
+        self.btn_confirmar = QPushButton("Confirmar")
+        self.btn_confirmar.setObjectName("exito_suave")
+        self.btn_confirmar.setMinimumHeight(38)
+        self.btn_confirmar.setMinimumWidth(118)
+        self.btn_confirmar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_confirmar.clicked.connect(self._confirmar_reserva)
+        layout_acciones.addWidget(self.btn_confirmar)
 
-        btn_cancelar = QPushButton("Cancelar Reserva")
-        btn_cancelar.setObjectName("peligro")
-        btn_cancelar.setMinimumHeight(40)
-        btn_cancelar.setMinimumWidth(160)
-        btn_cancelar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_cancelar.clicked.connect(self._cancelar_reserva)
-        layout_acciones.addWidget(btn_cancelar)
-
-        btn_eliminar = QPushButton("Eliminar")
-        btn_eliminar.setObjectName("peligro")
-        btn_eliminar.setMinimumHeight(40)
-        btn_eliminar.setMinimumWidth(120)
-        btn_eliminar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_eliminar.clicked.connect(self._eliminar_reserva)
-        layout_acciones.addWidget(btn_eliminar)
-
-        btn_limpiar = QPushButton("Limpiar en Lote")
-        btn_limpiar.setObjectName("peligro")
-        btn_limpiar.setMinimumHeight(40)
-        btn_limpiar.setMinimumWidth(140)
-        btn_limpiar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_limpiar.clicked.connect(self._limpiar_en_lote)
-        layout_acciones.addWidget(btn_limpiar)
+        self.btn_completar = QPushButton("Completar")
+        self.btn_completar.setObjectName("exito_suave")
+        self.btn_completar.setMinimumHeight(38)
+        self.btn_completar.setMinimumWidth(118)
+        self.btn_completar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_completar.clicked.connect(self._completar_reserva)
+        layout_acciones.addWidget(self.btn_completar)
 
         layout_acciones.addStretch()
+
+        self.btn_limpiar = QPushButton("Limpiar en Lote")
+        self.btn_limpiar.setObjectName("secundario")
+        self.btn_limpiar.setMinimumHeight(38)
+        self.btn_limpiar.setMinimumWidth(140)
+        self.btn_limpiar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_limpiar.clicked.connect(self._limpiar_en_lote)
+        layout_acciones.addWidget(self.btn_limpiar)
+
+        self.btn_cancelar = QPushButton("Cancelar Reserva")
+        self.btn_cancelar.setObjectName("peligro_borde")
+        self.btn_cancelar.setMinimumHeight(38)
+        self.btn_cancelar.setMinimumWidth(150)
+        self.btn_cancelar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancelar.clicked.connect(self._cancelar_reserva)
+        layout_acciones.addWidget(self.btn_cancelar)
+
+        self.btn_eliminar = QPushButton("Eliminar")
+        self.btn_eliminar.setObjectName("peligro_borde")
+        self.btn_eliminar.setMinimumHeight(38)
+        self.btn_eliminar.setMinimumWidth(100)
+        self.btn_eliminar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_eliminar.clicked.connect(self._eliminar_reserva)
+        layout_acciones.addWidget(self.btn_eliminar)
 
         layout.addLayout(layout_acciones)
 
@@ -1019,13 +1053,6 @@ class PanelReservas(QWidget):
 
         self.tabla.setRowCount(len(datos))
 
-        colores_estado = {
-            "Pendiente": NARANJA,
-            "Confirmada": VERDE,
-            "Cancelada": ROJO,
-            "Completada": SECUNDARIO,
-        }
-
         for fila, r in enumerate(datos):
             campos = [
                 str(r["id"]),
@@ -1039,29 +1066,48 @@ class PanelReservas(QWidget):
             ]
 
             for col, valor in enumerate(campos):
-                item = QTableWidgetItem(valor)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item = QTableWidgetItem(str(valor))
+                item.setToolTip(str(valor))
 
-                # Guardar el ID como data oculta para facilitar busquedas
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, r["id"])
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                elif col == 1:
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                    )
+                else:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
-                # Colorear la columna de estado
                 if col == 6:
-                    color = colores_estado.get(valor, GRIS)
-                    item.setBackground(QColor(color))
-                    item.setForeground(QColor("white") if valor != "Pendiente" else QColor("#333"))
-                    item.setFont(QFont("Raleway", 11, QFont.Weight.Bold))
+                    item.setData(Qt.ItemDataRole.UserRole, r["estado"])
+                elif r["estado"] == "Cancelada":
+                    item.setForeground(QColor("#9CA3AF"))
 
                 self.tabla.setItem(fila, col, item)
 
-        # Actualizar contador
         total = len(self.lista_reservas)
         mostrados = len(datos)
         if mostrados == total:
             self.lbl_contador.setText(f"Total: {total} reservas")
         else:
             self.lbl_contador.setText(f"Mostrando {mostrados} de {total} reservas")
+
+        self._actualizar_acciones()
+
+    def _actualizar_acciones(self):
+        """Habilita las acciones validas para la reserva seleccionada."""
+        reserva = self._obtener_reserva_seleccionada()
+        estado = reserva["estado"] if reserva else None
+        hay_seleccion = reserva is not None
+
+        self.btn_ver.setEnabled(hay_seleccion)
+        self.btn_editar.setEnabled(hay_seleccion)
+        self.btn_confirmar.setEnabled(estado == "Pendiente")
+        self.btn_completar.setEnabled(estado == "Confirmada")
+        self.btn_cancelar.setEnabled(estado in ("Pendiente", "Confirmada"))
+        self.btn_eliminar.setEnabled(hay_seleccion)
+        self.btn_limpiar.setEnabled(bool(self.lista_reservas))
 
     def _aplicar_filtro(self):
         """Filtra la tabla segun el estado y texto de busqueda."""
@@ -1104,6 +1150,16 @@ class PanelReservas(QWidget):
                 return r
         return None
 
+    def _notificar_confirmacion_estado(self, id_reserva, estado_anterior):
+        if estado_anterior == "Confirmada":
+            return
+        actualizada = next(
+            (r for r in self.lista_reservas if r.get("id") == id_reserva),
+            None,
+        )
+        if actualizada is not None and actualizada.get("estado") == "Confirmada":
+            notificaciones.enviar_confirmacion_estado_async(actualizada)
+
     def _obtener_siguiente_id(self):
         """Genera el siguiente ID disponible (autoincremento en memoria)."""
         if not self.lista_reservas:
@@ -1129,6 +1185,13 @@ class PanelReservas(QWidget):
             self._refrescar_tabla()
             self.reservas_cambiadas.emit()
 
+            reserva_creada = next(
+                (r for r in almacen_datos.lista_reservas if r.get("id") == nid),
+                None,
+            )
+            if reserva_creada is not None:
+                notificaciones.enviar_confirmacion_async(reserva_creada)
+
             QMessageBox.information(
                 self,
                 "Reserva Creada",
@@ -1142,7 +1205,7 @@ class PanelReservas(QWidget):
         """Muestra los datos completos de la reserva seleccionada."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para ver su detalle.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para ver su detalle.")
             return
 
         detalle = f"""
@@ -1155,7 +1218,7 @@ class PanelReservas(QWidget):
         Personas:     {reserva['personas']}
         Estado:       {reserva['estado']}
         Observaciones: {reserva['observaciones'] if reserva['observaciones'] else 'Ninguna'}
-        Gestiono:     {reserva['gestiono']}
+        Gestionó:     {reserva['gestiono']}
         """
 
         QMessageBox.information(self, "Detalle de Reserva", detalle)
@@ -1167,7 +1230,7 @@ class PanelReservas(QWidget):
         """Abre el dialogo con los datos de la reserva para editarla."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para editar.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para editar.")
             return
 
         dialogo = DialogoReserva(parent=self, datos=reserva)
@@ -1183,6 +1246,7 @@ class PanelReservas(QWidget):
 
             self._refrescar_tabla()
             self.reservas_cambiadas.emit()
+            self._notificar_confirmacion_estado(reserva["id"], reserva.get("estado"))
 
             QMessageBox.information(
                 self,
@@ -1197,11 +1261,11 @@ class PanelReservas(QWidget):
         """Cambia el estado de la reserva seleccionada a 'Confirmada'."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para confirmar.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para confirmar.")
             return
 
         if reserva["estado"] == "Confirmada":
-            QMessageBox.information(self, "Ya confirmada", "Esta reserva ya esta confirmada.")
+            QMessageBox.information(self, "Ya confirmada", "Esta reserva ya está confirmada.")
             return
 
         if reserva["estado"] == "Cancelada":
@@ -1223,7 +1287,7 @@ class PanelReservas(QWidget):
         respuesta = QMessageBox.question(
             self,
             "Confirmar Reserva",
-            f"Confirmar la reserva #{reserva['id']} de {reserva['cliente']}?",
+            f"¿Confirmar la reserva #{reserva['id']} de {reserva['cliente']}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
 
@@ -1234,6 +1298,7 @@ class PanelReservas(QWidget):
             if ok:
                 self._refrescar_tabla()
                 self.reservas_cambiadas.emit()
+                self._notificar_confirmacion_estado(reserva["id"], reserva.get("estado"))
                 QMessageBox.information(
                     self,
                     "Confirmada",
@@ -1251,11 +1316,11 @@ class PanelReservas(QWidget):
         """Cambia el estado de la reserva seleccionada a 'Completada'."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para completar.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para completar.")
             return
 
         if reserva["estado"] == "Completada":
-            QMessageBox.information(self, "Ya completada", "Esta reserva ya esta completada.")
+            QMessageBox.information(self, "Ya completada", "Esta reserva ya está completada.")
             return
 
         if reserva["estado"] == "Cancelada":
@@ -1277,7 +1342,8 @@ class PanelReservas(QWidget):
         respuesta = QMessageBox.question(
             self,
             "Completar Reserva",
-            f"Marcar como completada la reserva #{reserva['id']} de {reserva['cliente']}?\n\n"
+            f"¿Marcar como completada la reserva #{reserva['id']} de "
+            f"{reserva['cliente']}?\n\n"
             f"Mesa: {reserva['mesa']} | {reserva['hora_inicio']} - {reserva['hora_fin']}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
@@ -1307,11 +1373,11 @@ class PanelReservas(QWidget):
         """Cambia el estado de la reserva seleccionada a 'Cancelada'."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para cancelar.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para cancelar.")
             return
 
         if reserva["estado"] == "Cancelada":
-            QMessageBox.information(self, "Ya cancelada", "Esta reserva ya esta cancelada.")
+            QMessageBox.information(self, "Ya cancelada", "Esta reserva ya está cancelada.")
             return
 
         if reserva["estado"] == "Completada":
@@ -1325,7 +1391,8 @@ class PanelReservas(QWidget):
         respuesta = QMessageBox.question(
             self,
             "Cancelar Reserva",
-            f"Desea cancelar la reserva #{reserva['id']} de {reserva['cliente']}?\n\n"
+            f"¿Desea cancelar la reserva #{reserva['id']} de "
+            f"{reserva['cliente']}?\n\n"
             f"Mesa: {reserva['mesa']} | {reserva['hora_inicio']} - {reserva['hora_fin']}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
@@ -1355,16 +1422,16 @@ class PanelReservas(QWidget):
         """Elimina permanentemente la reserva seleccionada de la lista."""
         reserva = self._obtener_reserva_seleccionada()
         if reserva is None:
-            QMessageBox.information(self, "Sin seleccion", "Seleccione una reserva para eliminar.")
+            QMessageBox.information(self, "Sin selección", "Seleccione una reserva para eliminar.")
             return
 
         respuesta = QMessageBox.warning(
             self,
             "Eliminar Reserva",
-            f"ELIMINAR permanentemente la reserva #{reserva['id']}?\n\n"
+            f"¿ELIMINAR permanentemente la reserva #{reserva['id']}?\n\n"
             f"Cliente: {reserva['cliente']}\n"
             f"Mesa: {reserva['mesa']} | {reserva['fecha']} {reserva['hora_inicio']}\n\n"
-            f"Esta accion no se puede deshacer.",
+            "Esta acción no se puede deshacer.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )

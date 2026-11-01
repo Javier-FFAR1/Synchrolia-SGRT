@@ -100,6 +100,74 @@ def _bd_a_ui_hora(hora):
     return s[:5] if ":" in s else s
 
 
+_TOLERANCIA_DEFECTO = 15
+_LIMITE_CONFIRMACION_DEFECTO = 120
+_PARAMETROS_RESERVAS = {
+    "tolerancia_min": _TOLERANCIA_DEFECTO,
+    "limite_confirmacion_min": _LIMITE_CONFIRMACION_DEFECTO,
+}
+
+
+def _entero_parametro(valor, defecto, minimo=0):
+    try:
+        numero = int(valor)
+    except (TypeError, ValueError):
+        return defecto
+    return max(minimo, numero)
+
+
+def recargar_parametros_reservas():
+    """Actualiza en cache los limites usados por la automatizacion."""
+    from modulos.almacen_configuracion import almacen_config
+
+    parametros = almacen_config.obtener_parametros()
+    _PARAMETROS_RESERVAS["tolerancia_min"] = _entero_parametro(
+        parametros.get("tolerancia"), _TOLERANCIA_DEFECTO, 0
+    )
+    _PARAMETROS_RESERVAS["limite_confirmacion_min"] = _entero_parametro(
+        parametros.get("limite_confirmacion"), _LIMITE_CONFIRMACION_DEFECTO, 1
+    )
+    return dict(_PARAMETROS_RESERVAS)
+
+
+def _fecha_reserva_como_date(reserva):
+    try:
+        dia, mes, anio = reserva.get("fecha", "").split("/")
+        return datetime.date(int(anio), int(mes), int(dia))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _inicio_reserva_como_datetime(reserva):
+    try:
+        return datetime.datetime.strptime(
+            f"{reserva.get('fecha', '')} {reserva.get('hora_inicio', '')}",
+            "%d/%m/%Y %H:%M",
+        )
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _deadline_confirmacion(reserva, limite_min):
+    """Fecha limite para confirmar una reserva pendiente.
+
+    Si la reserva se creo dentro de la ventana normal de confirmacion, se le
+    concede la tolerancia configurada desde su creacion, sin superar el inicio.
+    """
+    inicio = _inicio_reserva_como_datetime(reserva)
+    if inicio is None:
+        return None
+
+    limite = inicio - datetime.timedelta(minutes=limite_min)
+    creada = reserva.get("fecha_creacion")
+    if isinstance(creada, datetime.datetime) and creada >= limite:
+        gracia = creada + datetime.timedelta(
+            minutes=_PARAMETROS_RESERVAS["tolerancia_min"]
+        )
+        return min(gracia, inicio)
+    return limite
+
+
 # ---------------------------------------------------------------------------
 # Helpers para resolver IDs (catálogos de la BD)
 # ---------------------------------------------------------------------------
@@ -213,7 +281,7 @@ def _cargar_reservas():
                       r.fecha_reserva, r.hora_inicio, r.hora_fin,
                       r.numero_personas, er.nombre_estado,
                       COALESCE(r.observaciones, ''), us.nombre_completo,
-                      r.id_cliente
+                      r.id_cliente, COALESCE(c.correo, ''), r.fecha_creacion
                FROM reservas r
                JOIN clientes c ON r.id_cliente = c.id_cliente
                JOIN mesas m ON r.id_mesa = m.id_mesa
@@ -222,11 +290,13 @@ def _cargar_reservas():
                ORDER BY r.id_reserva"""
         )
         for (rid, cliente, mesa, fecha, h_ini, h_fin,
-             personas, estado, obs, gestiono, id_cliente) in cur.fetchall():
+             personas, estado, obs, gestiono, id_cliente, correo,
+             fecha_creacion) in cur.fetchall():
             reservas.append({
                 "id": rid,
                 "cliente": cliente,
                 "id_cliente": id_cliente,
+                "correo": correo or "",
                 "mesa": mesa,
                 "fecha": _bd_a_ui_fecha(fecha),
                 "hora_inicio": _bd_a_ui_hora(h_ini),
@@ -235,6 +305,7 @@ def _cargar_reservas():
                 "estado": estado,
                 "observaciones": obs,
                 "gestiono": gestiono or "",
+                "fecha_creacion": fecha_creacion,
             })
         cur.close()
     except Error:
@@ -299,6 +370,7 @@ def _cargar_mantenimiento():
 lista_reservas = _cargar_reservas()
 lista_clientes = _cargar_clientes()
 _mesas_mantenimiento = _cargar_mantenimiento()
+recargar_parametros_reservas()
 
 
 # ---------------------------------------------------------------------------
@@ -339,22 +411,38 @@ def poner_mesa_en_mantenimiento(numero, activo=True):
 
 
 def estado_mesa(numero):
-    """Deriva el estado de una mesa (Mantenimiento/Ocupada/Reservada/Libre).
-
-    Solo considera reservas del dia actual: una reserva confirmada de otro dia
-    no debe marcar la mesa como ocupada hoy.
-    """
+    """Deriva el estado actual de una mesa a partir de las reservas de hoy."""
     if numero in _mesas_mantenimiento:
         return ESTADO_MESA_MANTENIMIENTO
-    hoy = datetime.date.today().strftime("%d/%m/%Y")
+
+    ahora = datetime.datetime.now()
+    hoy = ahora.date()
+    tolerancia = datetime.timedelta(
+        minutes=_PARAMETROS_RESERVAS["tolerancia_min"]
+    )
+    limite_min = _PARAMETROS_RESERVAS["limite_confirmacion_min"]
+    reservada = False
+
     for r in lista_reservas:
-        if (r.get("mesa") == numero and r.get("fecha") == hoy
-                and r.get("estado") == ESTADO_CONFIRMADA):
-            return ESTADO_MESA_OCUPADA
-    for r in lista_reservas:
-        if (r.get("mesa") == numero and r.get("fecha") == hoy
-                and r.get("estado") == ESTADO_PENDIENTE):
-            return ESTADO_MESA_RESERVADA
+        if r.get("mesa") != numero or _fecha_reserva_como_date(r) != hoy:
+            continue
+
+        inicio = _inicio_reserva_como_datetime(r)
+        if inicio is None:
+            continue
+
+        if r.get("estado") == ESTADO_CONFIRMADA:
+            if inicio <= ahora < inicio + tolerancia:
+                return ESTADO_MESA_OCUPADA
+            if ahora < inicio:
+                reservada = True
+        elif r.get("estado") == ESTADO_PENDIENTE:
+            deadline = _deadline_confirmacion(r, limite_min)
+            if deadline is not None and ahora < deadline:
+                reservada = True
+
+    if reservada:
+        return ESTADO_MESA_RESERVADA
     return ESTADO_MESA_LIBRE
 
 
@@ -471,7 +559,7 @@ def obtener_ubicaciones():
 def _mensaje_duplicado(error, entidad):
     """Si el error es de violacion de UNIQUE, devuelve un mensaje claro."""
     if getattr(error, "errno", None) == 1062:
-        return f"Ya existe {entidad} con ese nombre o numero."
+        return f"Ya existe {entidad} con ese nombre o número."
     return str(error)
 
 
@@ -479,10 +567,10 @@ def crear_ubicacion(nombre):
     """Crea un area nueva. Devuelve (id, None) o (None, error)."""
     nombre = (nombre or "").strip()
     if not nombre:
-        return None, "El nombre del area no puede estar vacio."
+        return None, "El nombre del área no puede estar vacío."
     conn = get_conexion()
     if conn is None:
-        return None, "No hay conexion a la base de datos."
+        return None, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -493,7 +581,7 @@ def crear_ubicacion(nombre):
         cur.close()
         return nuevo_id, None
     except Error as e:
-        return None, _mensaje_duplicado(e, "un area")
+        return None, _mensaje_duplicado(e, "un área")
     finally:
         conn.close()
 
@@ -502,10 +590,10 @@ def renombrar_ubicacion(id_ubicacion, nombre):
     """Renombra un area. Devuelve (True, None) o (False, error)."""
     nombre = (nombre or "").strip()
     if not nombre:
-        return False, "El nombre del area no puede estar vacio."
+        return False, "El nombre del área no puede estar vacío."
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -516,7 +604,7 @@ def renombrar_ubicacion(id_ubicacion, nombre):
         cur.close()
         return True, None
     except Error as e:
-        return False, _mensaje_duplicado(e, "un area")
+        return False, _mensaje_duplicado(e, "un área")
     finally:
         conn.close()
 
@@ -525,7 +613,7 @@ def eliminar_ubicacion(id_ubicacion):
     """Elimina un area si no tiene mesas asociadas. Devuelve (True, None) o (False, error)."""
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM ubicaciones WHERE id_ubicacion = %s", (id_ubicacion,))
@@ -534,7 +622,7 @@ def eliminar_ubicacion(id_ubicacion):
         return True, None
     except Error as e:
         if getattr(e, "errno", None) == 1451:
-            return False, "No se puede eliminar el area: tiene mesas asociadas."
+            return False, "No se puede eliminar el área: tiene mesas asociadas."
         return False, str(e)
     finally:
         conn.close()
@@ -571,10 +659,10 @@ def crear_mesa(numero, capacidad, id_ubicacion):
     """Crea una mesa en el estado 'Libre'. Devuelve (True, None) o (False, error)."""
     numero = (numero or "").strip()
     if not numero:
-        return False, "El numero de mesa no puede estar vacio."
+        return False, "El número de mesa no puede estar vacío."
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -597,10 +685,10 @@ def actualizar_mesa(id_mesa, numero, capacidad, id_ubicacion):
     """Actualiza numero, capacidad y area de una mesa. Devuelve (True, None) o (False, error)."""
     numero = (numero or "").strip()
     if not numero:
-        return False, "El numero de mesa no puede estar vacio."
+        return False, "El número de mesa no puede estar vacío."
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -621,7 +709,7 @@ def eliminar_mesa(id_mesa):
     """Elimina una mesa si no tiene reservas asociadas. Devuelve (True, None) o (False, error)."""
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute("DELETE FROM mesas WHERE id_mesa = %s", (id_mesa,))
@@ -664,7 +752,7 @@ def crear_cliente(nombre, telefono, correo=""):
     """Inserta un cliente. Devuelve (True, id, None) o (False, None, error)."""
     conn = get_conexion()
     if conn is None:
-        return False, None, "No hay conexion a la base de datos."
+        return False, None, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -751,6 +839,126 @@ def _recargar_reservas():
     lista_reservas[:] = nuevas
 
 
+_MOTIVO_AUTO_PENDIENTE = "[AUTO] Cancelada: no se confirmó antes del límite."
+_MOTIVO_AUTO_NO_SHOW = "[AUTO] Cancelada: no-show tras la tolerancia."
+
+
+def _cancelar_reservas_auto(cur, ids, motivo, estado_esperado):
+    if not ids:
+        return 0
+    placeholders = ",".join(["%s"] * len(ids))
+    cur.execute(
+        f"""UPDATE reservas
+            SET id_estado_reserva = (
+                    SELECT id_estado_reserva FROM estados_reserva
+                    WHERE nombre_estado = %s
+                ),
+                observaciones = CASE
+                    WHEN observaciones IS NULL OR TRIM(observaciones) = ''
+                        THEN %s
+                    ELSE CONCAT(LEFT(observaciones, 180), ' | ', %s)
+                END
+            WHERE id_reserva IN ({placeholders})
+              AND id_estado_reserva = (
+                    SELECT id_estado_reserva FROM estados_reserva
+                    WHERE nombre_estado = %s
+                )""",
+        [ESTADO_CANCELADA, motivo, motivo]
+        + list(ids)
+        + [estado_esperado],
+    )
+    return cur.rowcount
+
+
+def procesar_reservas_vencidas(ahora=None):
+    """Cancela reservas pendientes vencidas y no-shows confirmados.
+
+    Las pendientes se cancelan al llegar al limite configurado antes del
+    inicio. Las confirmadas se liberan cuando superan el inicio mas la
+    tolerancia. Solo se procesan reservas de hoy o fechas futuras.
+    """
+    recargar_parametros_reservas()
+    ahora = ahora or datetime.datetime.now()
+    hoy = ahora.date()
+    tolerancia = datetime.timedelta(
+        minutes=_PARAMETROS_RESERVAS["tolerancia_min"]
+    )
+    limite_min = _PARAMETROS_RESERVAS["limite_confirmacion_min"]
+
+    pendientes = []
+    no_shows = []
+    mesas = set()
+
+    for r in lista_reservas:
+        fecha_reserva = _fecha_reserva_como_date(r)
+        if fecha_reserva is None or fecha_reserva < hoy:
+            continue
+
+        estado = r.get("estado")
+        if estado == ESTADO_PENDIENTE:
+            deadline = _deadline_confirmacion(r, limite_min)
+            if deadline is not None and ahora >= deadline:
+                pendientes.append(r["id"])
+                mesas.add(r.get("mesa"))
+        elif estado == ESTADO_CONFIRMADA and fecha_reserva == hoy:
+            inicio = _inicio_reserva_como_datetime(r)
+            if inicio is not None and ahora >= inicio + tolerancia:
+                no_shows.append(r["id"])
+                mesas.add(r.get("mesa"))
+
+    if not pendientes and not no_shows:
+        return {
+            "pendientes": 0, "no_shows": 0, "total": 0,
+            "mesas": [], "error": None,
+        }
+
+    conn = get_conexion()
+    if conn is None:
+        return {
+            "pendientes": 0, "no_shows": 0, "total": 0,
+            "mesas": [], "error": "No hay conexión a la base de datos.",
+        }
+
+    try:
+        cur = conn.cursor()
+        canceladas_pendientes = _cancelar_reservas_auto(
+            cur, pendientes, _MOTIVO_AUTO_PENDIENTE, ESTADO_PENDIENTE
+        )
+        canceladas_no_show = _cancelar_reservas_auto(
+            cur, no_shows, _MOTIVO_AUTO_NO_SHOW, ESTADO_CONFIRMADA
+        )
+        conn.commit()
+        cur.close()
+    except Error as e:
+        conn.rollback()
+        return {
+            "pendientes": 0, "no_shows": 0, "total": 0,
+            "mesas": [], "error": str(e),
+        }
+    finally:
+        conn.close()
+
+    total = canceladas_pendientes + canceladas_no_show
+    if not total:
+        return {
+            "pendientes": 0, "no_shows": 0, "total": 0,
+            "mesas": [], "error": None,
+        }
+
+    _recargar_reservas()
+    for numero in mesas:
+        if numero:
+            _sincronizar_estado_mesa_bd(numero)
+
+    return {
+        "pendientes": canceladas_pendientes,
+        "no_shows": canceladas_no_show,
+        "total": total,
+        "mesas": sorted(numero for numero in mesas if numero),
+        "error": None,
+    }
+
+
 def crear_reserva(datos):
     """
     Crea una reserva a partir de un dict de la UI (obtener_datos del dialogo).
@@ -760,7 +968,7 @@ def crear_reserva(datos):
     """
     conn = get_conexion()
     if conn is None:
-        return False, None, "No hay conexion a la base de datos."
+        return False, None, "No hay conexión a la base de datos."
     try:
         id_cliente = datos.get("id_cliente")
         if not _id_cliente_de(id_cliente):
@@ -794,7 +1002,7 @@ def crear_reserva(datos):
         conn.rollback()
         return False, None, f"Error al guardar la reserva: {e}"
     except (ValueError, TypeError) as e:
-        return False, None, f"Datos invalidos: {e}"
+        return False, None, f"Datos inválidos: {e}"
     finally:
         conn.close()
 
@@ -805,7 +1013,7 @@ def actualizar_reserva(id_reserva, datos):
     """
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         id_cliente = datos.get("id_cliente")
         if not _id_cliente_de(id_cliente):
@@ -842,7 +1050,7 @@ def actualizar_reserva(id_reserva, datos):
             cur.close()
             return False, (
                 f"No se puede pasar la reserva de '{estado_actual}' a '{nuevo_estado}'. "
-                f"Flujo valido: {TRANSICIONES_ESTADO.get(estado_actual, []) or 'estado terminal'}."
+                f"Flujo válido: {TRANSICIONES_ESTADO.get(estado_actual, []) or 'estado terminal'}."
             )
 
         cur.execute(
@@ -867,7 +1075,7 @@ def actualizar_reserva(id_reserva, datos):
         conn.rollback()
         return False, f"Error al actualizar la reserva: {e}"
     except (ValueError, TypeError) as e:
-        return False, f"Datos invalidos: {e}"
+        return False, f"Datos inválidos: {e}"
     finally:
         conn.close()
 
@@ -876,7 +1084,7 @@ def cambiar_estado_reserva(id_reserva, nuevo_estado):
     """Cambia el estado de una reserva. Devuelve (True, None) o (False, error)."""
     conn = get_conexion()
     if conn is None:
-        return False, "No hay conexion a la base de datos."
+        return False, "No hay conexión a la base de datos."
     try:
         cur = conn.cursor()
         cur.execute(
@@ -897,7 +1105,7 @@ def cambiar_estado_reserva(id_reserva, nuevo_estado):
             cur.close()
             return False, (
                 f"No se puede pasar la reserva de '{estado_actual}' a '{nuevo_estado}'. "
-                f"Flujo valido: {TRANSICIONES_ESTADO.get(estado_actual, []) or 'estado terminal'}."
+                f"Flujo válido: {TRANSICIONES_ESTADO.get(estado_actual, []) or 'estado terminal'}."
             )
 
         id_estado = _id_estado_reserva_de(nuevo_estado)
@@ -1028,7 +1236,7 @@ def borrar_reservas_por_lotes(ids, tamanio_lote=20, pedir_parada=None,
     """
     conn = get_conexion()
     if conn is None:
-        raise RuntimeError("No hay conexion a la base de datos.")
+        raise RuntimeError("No hay conexión a la base de datos.")
     ids = [int(i) for i in ids]
     total = len(ids)
     eliminadas = 0

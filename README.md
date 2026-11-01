@@ -99,6 +99,21 @@ SYNCHROLIA_DB_PASSWORD=tu_contrasena
 SYNCHROLIA_DB_NAME=restaurante_reservas
 ```
 
+Para enviar confirmaciones y recordatorios por correo, agregue tambien la
+configuracion SMTP de Gmail. Use una contrasena de aplicacion, no la
+contrasena normal de la cuenta:
+
+```
+SYNCHROLIA_SMTP_HOST=smtp.gmail.com
+SYNCHROLIA_SMTP_PORT=587
+SYNCHROLIA_SMTP_USER=tu_correo@gmail.com
+SYNCHROLIA_SMTP_PASSWORD=tu_contrasena_de_aplicacion
+SYNCHROLIA_SMTP_FROM=tu_correo@gmail.com
+```
+
+> Despues de editar `.env`, reinicie la aplicacion. Los recordatorios se
+> envian mientras Synchrolia este abierta.
+
 > El archivo `.env` esta en `.gitignore`: nunca subas tus credenciales al repositorio.
 
 ## Ejecucion

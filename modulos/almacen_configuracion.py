@@ -26,6 +26,7 @@ DIAS_SEMANA = [
 _PARAM_UI_A_BD = {
     "duracion": "duracion_estandar_reserva_min",
     "tolerancia": "tiempo_tolerancia_min",
+    "limite_confirmacion": "minutos_limite_confirmacion",
     "max_personas": "max_personas_por_reserva",
     "email_notif": "notif_email_confirmacion",
     "recordatorio": "notif_recordatorio",
@@ -36,6 +37,7 @@ _PARAM_BD_A_UI = {v: k for k, v in _PARAM_UI_A_BD.items()}
 _PARAMETROS_DEFECTO = {
     "duracion": "90",
     "tolerancia": "15",
+    "limite_confirmacion": "120",
     "max_personas": "20",
     "email_notif": True,
     "recordatorio": False,
@@ -155,12 +157,13 @@ class AlmacenConfiguracion:
         finally:
             conn.close()
 
-    def guardar_parametros(self, duracion, tolerancia, max_personas,
-                           email_notif, recordatorio):
+    def guardar_parametros(self, duracion, tolerancia, limite_confirmacion,
+                           max_personas, email_notif, recordatorio):
         """Guarda los parametros generales. Devuelve el dict guardado."""
         valores = {
             "duracion": str(duracion),
             "tolerancia": str(tolerancia),
+            "limite_confirmacion": str(limite_confirmacion),
             "max_personas": str(max_personas),
             "email_notif": 1 if email_notif else 0,
             "recordatorio": 1 if recordatorio else 0,
@@ -172,9 +175,10 @@ class AlmacenConfiguracion:
             cur = conn.cursor()
             for clave_ui, valor in valores.items():
                 cur.execute(
-                    """UPDATE configuracion_general SET valor = %s
-                       WHERE clave = %s""",
-                    (str(valor), _PARAM_UI_A_BD[clave_ui]),
+                    """INSERT INTO configuracion_general (clave, valor)
+                       VALUES (%s, %s)
+                       ON DUPLICATE KEY UPDATE valor = VALUES(valor)""",
+                    (_PARAM_UI_A_BD[clave_ui], str(valor)),
                 )
             conn.commit()
             cur.close()
@@ -351,7 +355,7 @@ class AlmacenConfiguracion:
         """Agrega un festivo. Devuelve (True, None) o (False, error)."""
         fecha = fecha.strip()
         if not fecha:
-            return False, "La fecha no puede estar vacia."
+            return False, "La fecha no puede estar vacía."
         if not self._fecha_valida(fecha):
             return False, "La fecha debe tener el formato DD/MM/AAAA y ser una fecha real."
         dia, mes, anio = (int(p) for p in fecha.split("/"))
