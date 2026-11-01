@@ -351,7 +351,7 @@ class BuscadorMesa(QWidget):
 
         # Campo de texto principal
         self.txt_busqueda = QLineEdit()
-        self.txt_busqueda.setPlaceholderText("Codigo o cantidad de personas")
+        self.txt_busqueda.setPlaceholderText("Código o cantidad de personas")
         self.txt_busqueda.setMinimumHeight(36)
         self.txt_busqueda.setStyleSheet(f"""
             QLineEdit {{

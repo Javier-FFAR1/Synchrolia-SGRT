@@ -38,7 +38,7 @@ class VentanaLogin(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Synchrolia SGRT - Iniciar Sesion")
+        self.setWindowTitle("Synchrolia SGRT - Iniciar Sesión")
         self.setFixedSize(560, 800)
         self.setWindowIcon(QIcon(LOGO_PATH))
         self.setStyleSheet(f"""
@@ -86,7 +86,11 @@ class VentanaLogin(QWidget):
         lbl_nombre = QLabel("SYNCHROLIA")
         lbl_nombre.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_nombre.setFont(QFont("Raleway", 22, QFont.Weight.Bold))
-        lbl_nombre.setStyleSheet(f"color: {DORADO}; letter-spacing: 6px; margin-bottom: 4px;")
+        lbl_nombre.setStyleSheet(
+            f"color: {DORADO}; font-family: 'Raleway', 'Segoe UI', sans-serif; "
+            "font-size: 22px; font-weight: 700; letter-spacing: 6px; "
+            "margin-bottom: 4px;"
+        )
         layout_interior.addWidget(lbl_nombre)
 
         # Separador visual
@@ -98,10 +102,13 @@ class VentanaLogin(QWidget):
         layout_interior.addSpacing(20)
 
         # Titulo del formulario
-        lbl_titulo = QLabel("Iniciar Sesion")
+        lbl_titulo = QLabel("Iniciar Sesión")
         lbl_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_titulo.setFont(QFont("Raleway", 18, QFont.Weight.Bold))
-        lbl_titulo.setStyleSheet("color: white;")
+        lbl_titulo.setStyleSheet(
+            "color: white; font-family: 'Raleway', 'Segoe UI', sans-serif; "
+            "font-size: 18px; font-weight: 700;"
+        )
         layout_interior.addWidget(lbl_titulo)
 
         layout_interior.addSpacing(24)
@@ -132,12 +139,12 @@ class VentanaLogin(QWidget):
         layout_interior.addSpacing(12)
 
         # Campo: Contrasena
-        lbl_contrasena = QLabel("Contrasena")
+        lbl_contrasena = QLabel("Contraseña")
         lbl_contrasena.setStyleSheet("color: #B0BEC5; font-size: 12px;")
         layout_interior.addWidget(lbl_contrasena)
 
         self.txt_contrasena = QLineEdit()
-        self.txt_contrasena.setPlaceholderText("Ingrese su contrasena")
+        self.txt_contrasena.setPlaceholderText("Ingrese su contraseña")
         self.txt_contrasena.setEchoMode(QLineEdit.EchoMode.Password)
         self.txt_contrasena.setMinimumHeight(40)
         self.txt_contrasena.setStyleSheet(f"""
@@ -208,7 +215,7 @@ class VentanaLogin(QWidget):
         layout_interior.addStretch()
 
         # Pie de pagina
-        lbl_pie = QLabel("UNAN-Leon | Proyecto Integrador II | 2026")
+        lbl_pie = QLabel("UNAN-León | Proyecto Integrador II | 2026")
         lbl_pie.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_pie.setStyleSheet("color: #607D8B; font-size: 10px;")
         layout_interior.addWidget(lbl_pie)
@@ -241,8 +248,8 @@ class VentanaLogin(QWidget):
         if not usuario or not contrasena:
             QMessageBox.warning(
                 self,
-                "Campos vacios",
-                "<span style='color:#FFFFFF;'>Debe ingresar usuario y contrasena.</span>"
+                "Campos vacíos",
+                "<span style='color:#FFFFFF;'>Debe ingresar usuario y contraseña.</span>"
             )
             return
 
@@ -256,8 +263,8 @@ class VentanaLogin(QWidget):
             restantes = MAX_INTENTOS - self._intentos_fallidos
             QMessageBox.critical(
                 self,
-                "Error de autenticacion",
-                f"<span style='color:#FFFFFF;'>Usuario o contrasena incorrectos. "
+                "Error de autenticación",
+                f"<span style='color:#FFFFFF;'>Usuario o contraseña incorrectos. "
                 f"Le queda(n) {max(restantes, 0)} intento(s).</span>"
             )
             self.txt_contrasena.clear()
@@ -279,7 +286,7 @@ class VentanaLogin(QWidget):
         QMessageBox.warning(
             self,
             "Cuenta bloqueada temporalmente",
-            f"<span style='color:#FFFFFF;'>Supero el limite de intentos. "
+            f"<span style='color:#FFFFFF;'>Superó el límite de intentos. "
             f"Espere {BLOQUEO_SEGUNDOS} segundos para volver a intentarlo.</span>"
         )
 

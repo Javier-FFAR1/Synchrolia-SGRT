@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFormLayout, QLineEdit, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QMessageBox, QGroupBox,
-    QAbstractItemView, QDialog
+    QAbstractItemView, QDialog, QSizePolicy
 )
 from PySide6.QtCore import Qt, QRegularExpression
 from PySide6.QtGui import QFont, QIntValidator, QRegularExpressionValidator
@@ -26,6 +26,7 @@ class PanelClientes(QWidget):
         super().__init__()
         # Fuente unica: la misma lista que usa el almacen central.
         self.lista_clientes = lista_clientes
+        self._id_cliente_editando = None
         self._construir_interfaz()
 
     def _construir_interfaz(self):
@@ -34,9 +35,13 @@ class PanelClientes(QWidget):
         layout.setSpacing(12)
 
         # Encabezado
-        lbl_titulo = QLabel("Gestion de Clientes")
+        lbl_titulo = QLabel("Gestión de Clientes")
         lbl_titulo.setObjectName("titulo")
         layout.addWidget(lbl_titulo)
+
+        lbl_sub = QLabel("Registra clientes y consulta su historial de reservas")
+        lbl_sub.setObjectName("subtitulo")
+        layout.addWidget(lbl_sub)
 
         layout_principal = QHBoxLayout()
         layout_principal.setSpacing(16)
@@ -45,11 +50,14 @@ class PanelClientes(QWidget):
         # Formulario de registro/edicion
         # ============================================================
         grupo_form = QGroupBox("Datos del Cliente")
-        grupo_form.setMinimumWidth(380)
-        grupo_form.setMaximumWidth(420)
+        grupo_form.setMinimumWidth(360)
+        grupo_form.setMaximumWidth(400)
+        grupo_form.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+        )
 
         form = QFormLayout(grupo_form)
-        form.setSpacing(10)
+        form.setSpacing(12)
         form.setContentsMargins(16, 24, 16, 16)
 
         self.txt_nombre = QLineEdit()
@@ -60,13 +68,13 @@ class PanelClientes(QWidget):
         form.addRow("Nombre:", self.txt_nombre)
 
         self.txt_telefono = QLineEdit()
-        self.txt_telefono.setPlaceholderText("Telefono de contacto")
+        self.txt_telefono.setPlaceholderText("Teléfono de contacto")
         self.txt_telefono.setValidator(QIntValidator(0, 99999999))
         self.txt_telefono.setMaxLength(8)
-        form.addRow("Telefono:", self.txt_telefono)
+        form.addRow("Teléfono:", self.txt_telefono)
 
         self.txt_correo = QLineEdit()
-        self.txt_correo.setPlaceholderText("Correo electronico (opcional)")
+        self.txt_correo.setPlaceholderText("Correo electrónico (opcional)")
         pattern = QRegularExpression(
             r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
         )
@@ -74,24 +82,30 @@ class PanelClientes(QWidget):
         form.addRow("Correo:", self.txt_correo)
 
         layout_botones = QHBoxLayout()
+        layout_botones.setSpacing(8)
 
-        btn_guardar = QPushButton("Guardar Cliente")
-        btn_guardar.setObjectName("acento")
-        btn_guardar.setMinimumHeight(38)
-        btn_guardar.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_guardar.clicked.connect(self._guardar_cliente)
-        layout_botones.addWidget(btn_guardar)
+        self.btn_guardar = QPushButton("Guardar Cliente")
+        self.btn_guardar.setObjectName("acento")
+        self.btn_guardar.setMinimumHeight(38)
+        self.btn_guardar.setMinimumWidth(150)
+        self.btn_guardar.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_guardar.clicked.connect(self._guardar_cliente)
+        layout_botones.addWidget(self.btn_guardar)
 
         btn_limpiar = QPushButton("Limpiar")
         btn_limpiar.setObjectName("secundario")
         btn_limpiar.setMinimumHeight(38)
+        btn_limpiar.setMinimumWidth(90)
         btn_limpiar.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_limpiar.clicked.connect(self._limpiar)
         layout_botones.addWidget(btn_limpiar)
 
+        layout_botones.addStretch()
         form.addRow(layout_botones)
 
-        layout_principal.addWidget(grupo_form)
+        layout_principal.addWidget(
+            grupo_form, 0, Qt.AlignmentFlag.AlignTop
+        )
 
         # ============================================================
         # Tabla de clientes registrados
@@ -99,12 +113,15 @@ class PanelClientes(QWidget):
         layout_derecha = QVBoxLayout()
 
         lbl_lista = QLabel("Clientes Registrados")
-        lbl_lista.setStyleSheet(f"color: {PRIMARIO}; font-size: 16px; font-weight: 700;")
+        lbl_lista.setStyleSheet(
+            f"color: {PRIMARIO}; font-size: 15px; font-weight: 700; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
+        )
         layout_derecha.addWidget(lbl_lista)
 
         # Campo de busqueda
         self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar por nombre o telefono...")
+        self.txt_buscar.setPlaceholderText("Buscar por nombre o teléfono...")
         self.txt_buscar.setMinimumHeight(36)
         self.txt_buscar.textChanged.connect(self._filtrar_clientes)
         layout_derecha.addWidget(self.txt_buscar)
@@ -112,42 +129,66 @@ class PanelClientes(QWidget):
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(5)
         self.tabla.setHorizontalHeaderLabels([
-            "ID", "Nombre", "Telefono", "Correo", "Registro"
+            "ID", "Nombre", "Teléfono", "Correo", "Registro"
         ])
-        self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header = self.tabla.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(3, 200)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        for columna in range(self.tabla.columnCount()):
+            item = self.tabla.horizontalHeaderItem(columna)
+            if item is not None:
+                alineacion = (
+                    Qt.AlignmentFlag.AlignLeft
+                    if columna in (1, 2, 3)
+                    else Qt.AlignmentFlag.AlignCenter
+                )
+                item.setTextAlignment(
+                    alineacion | Qt.AlignmentFlag.AlignVCenter
+                )
         self.tabla.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tabla.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tabla.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tabla.verticalHeader().setVisible(False)
+        self.tabla.verticalHeader().setDefaultSectionSize(38)
+        self.tabla.setAlternatingRowColors(True)
+        self.tabla.itemSelectionChanged.connect(self._actualizar_acciones)
 
-        layout_derecha.addWidget(self.tabla)
-        self._refrescar_tabla()
+        layout_derecha.addWidget(self.tabla, 1)
 
         # Botones de gestion
         layout_acciones = QHBoxLayout()
+        layout_acciones.setSpacing(8)
 
-        btn_editar = QPushButton("Editar Seleccionado")
-        btn_editar.setMinimumHeight(36)
-        btn_editar.clicked.connect(self._editar_cliente)
-        layout_acciones.addWidget(btn_editar)
+        self.btn_editar = QPushButton("Editar Seleccionado")
+        self.btn_editar.setObjectName("secundario")
+        self.btn_editar.setMinimumHeight(36)
+        self.btn_editar.clicked.connect(self._editar_cliente)
+        layout_acciones.addWidget(self.btn_editar)
 
-        btn_eliminar = QPushButton("Eliminar")
-        btn_eliminar.setObjectName("peligro")
-        btn_eliminar.setMinimumHeight(36)
-        btn_eliminar.clicked.connect(self._eliminar_cliente)
-        layout_acciones.addWidget(btn_eliminar)
+        self.btn_historial = QPushButton("Ver Historial")
+        self.btn_historial.setObjectName("secundario")
+        self.btn_historial.setMinimumHeight(36)
+        self.btn_historial.clicked.connect(self._ver_historial)
+        layout_acciones.addWidget(self.btn_historial)
 
-        btn_historial = QPushButton("Ver Historial")
-        btn_historial.setMinimumHeight(36)
-        btn_historial.clicked.connect(self._ver_historial)
-        layout_acciones.addWidget(btn_historial)
+        layout_acciones.addStretch()
+
+        self.btn_eliminar = QPushButton("Eliminar")
+        self.btn_eliminar.setObjectName("peligro_borde")
+        self.btn_eliminar.setMinimumHeight(36)
+        self.btn_eliminar.clicked.connect(self._eliminar_cliente)
+        layout_acciones.addWidget(self.btn_eliminar)
 
         layout_derecha.addLayout(layout_acciones)
 
-        layout_principal.addLayout(layout_derecha)
+        layout_principal.addLayout(layout_derecha, 1)
 
-        layout.addLayout(layout_principal)
-        layout.addStretch()
+        layout.addLayout(layout_principal, 1)
+        self._refrescar_tabla()
 
     def _refrescar_tabla(self):
         """Vuelca la lista de clientes (fuente unica) a la tabla."""
@@ -162,8 +203,27 @@ class PanelClientes(QWidget):
             )
             for col, valor in enumerate(datos):
                 item = QTableWidgetItem(str(valor))
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                item.setToolTip(str(valor))
+
+                if col in (1, 2, 3):
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                    )
+                else:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                if col == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, c.get("id"))
+
                 self.tabla.setItem(fila, col, item)
+
+        self._actualizar_acciones()
+
+    def _actualizar_acciones(self):
+        hay_seleccion = self.tabla.currentRow() >= 0
+        self.btn_editar.setEnabled(hay_seleccion)
+        self.btn_eliminar.setEnabled(hay_seleccion)
+        self.btn_historial.setEnabled(hay_seleccion)
 
     def _guardar_cliente(self):
         nombre = self.txt_nombre.text().strip()
@@ -171,14 +231,14 @@ class PanelClientes(QWidget):
         correo = self.txt_correo.text().strip()
 
         if not nombre or not telefono:
-            QMessageBox.warning(self, "Campos requeridos", "Nombre y telefono son obligatorios.")
+            QMessageBox.warning(self, "Campos requeridos", "Nombre y teléfono son obligatorios.")
             return
 
         if len(telefono) < 8:
             QMessageBox.warning(
                 self,
-                "Telefono invalido",
-                "El telefono debe tener al menos 8 digitos."
+                "Teléfono inválido",
+                "El teléfono debe tener al menos 8 dígitos."
             )
             self.txt_telefono.setFocus()
             return
@@ -191,23 +251,36 @@ class PanelClientes(QWidget):
             if not patron.match(correo).hasMatch():
                 QMessageBox.warning(
                     self,
-                    "Correo invalido",
-                    "El correo electronico no tiene un formato valido."
+                    "Correo inválido",
+                    "El correo electrónico no tiene un formato válido."
                 )
                 self.txt_correo.setFocus()
                 return
 
-        if self._telefono_en_uso(telefono):
-            QMessageBox.warning(
-                self,
-                "Telefono duplicado",
-                f"Ya existe un cliente registrado con el telefono {telefono}."
-            )
+        if self._telefono_en_uso(telefono, id_excluir=self._id_cliente_editando):
+            if self._id_cliente_editando is None:
+                mensaje = f"Ya existe un cliente registrado con el teléfono {telefono}."
+            else:
+                mensaje = f"Ya existe otro cliente registrado con el teléfono {telefono}."
+            QMessageBox.warning(self, "Teléfono duplicado", mensaje)
             self.txt_telefono.setFocus()
             return
 
-        from datetime import date
-        # Insertar el cliente en la base de datos y actualizar la cache
+        if self._id_cliente_editando is not None:
+            if not almacen_datos.actualizar_cliente(
+                self._id_cliente_editando, nombre, telefono, correo
+            ):
+                QMessageBox.critical(self, "Error", "No se pudo actualizar el cliente.")
+                return
+            self._refrescar_tabla()
+            QMessageBox.information(
+                self,
+                "Cliente Actualizado",
+                f"Cliente '{nombre}' actualizado correctamente."
+            )
+            self._limpiar()
+            return
+
         ok, nid, error = almacen_datos.crear_cliente(nombre, telefono, correo)
         if not ok:
             QMessageBox.critical(self, "Error", error or "No se pudo guardar el cliente.")
@@ -228,6 +301,8 @@ class PanelClientes(QWidget):
         return False
 
     def _limpiar(self):
+        self._id_cliente_editando = None
+        self.btn_guardar.setText("Guardar Cliente")
         self.txt_nombre.clear()
         self.txt_telefono.clear()
         self.txt_correo.clear()
@@ -247,78 +322,27 @@ class PanelClientes(QWidget):
     def _editar_cliente(self):
         fila = self.tabla.currentRow()
         if fila == -1:
-            QMessageBox.information(self, "Seleccion", "Seleccione un cliente para editar.")
+            QMessageBox.information(self, "Selección", "Seleccione un cliente para editar.")
             return
         id_cliente = int(self.tabla.item(fila, 0).text())
-        nombre = self.tabla.item(fila, 1).text()
+        self._id_cliente_editando = id_cliente
         self.txt_nombre.setText(self.tabla.item(fila, 1).text())
         self.txt_telefono.setText(self.tabla.item(fila, 2).text())
         self.txt_correo.setText(self.tabla.item(fila, 3).text())
-
-        respuesta = QMessageBox.question(
-            self,
-            "Editar Cliente",
-            f"Actualizar los datos del cliente '{nombre}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if respuesta == QMessageBox.StandardButton.Yes:
-            nuevo_nombre = self.txt_nombre.text().strip()
-            nuevo_telefono = self.txt_telefono.text().strip()
-            nuevo_correo = self.txt_correo.text().strip()
-            if not nuevo_nombre or not nuevo_telefono:
-                QMessageBox.warning(self, "Campos requeridos", "Nombre y telefono son obligatorios.")
-                return
-            if len(nuevo_telefono) < 8:
-                QMessageBox.warning(
-                    self,
-                    "Telefono invalido",
-                    "El telefono debe tener al menos 8 digitos."
-                )
-                self.txt_telefono.setFocus()
-                return
-            if nuevo_correo:
-                patron = QRegularExpression(
-                    r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
-                )
-                if not patron.match(nuevo_correo).hasMatch():
-                    QMessageBox.warning(
-                        self,
-                        "Correo invalido",
-                        "El correo electronico no tiene un formato valido."
-                    )
-                    self.txt_correo.setFocus()
-                    return
-            if self._telefono_en_uso(nuevo_telefono, id_excluir=id_cliente):
-                QMessageBox.warning(
-                    self,
-                    "Telefono duplicado",
-                    f"Ya existe otro cliente registrado con el telefono {nuevo_telefono}."
-                )
-                self.txt_telefono.setFocus()
-                return
-            if not almacen_datos.actualizar_cliente(id_cliente, nuevo_nombre, nuevo_telefono, nuevo_correo):
-                QMessageBox.critical(self, "Error", "No se pudo actualizar el cliente.")
-                return
-            self._refrescar_tabla()
-            QMessageBox.information(
-                self,
-                "Cliente Actualizado",
-                f"Cliente '{nuevo_nombre}' actualizado correctamente."
-            )
-            self._limpiar()
-        else:
-            self._limpiar()
+        self.btn_guardar.setText("Actualizar Cliente")
+        self.txt_nombre.setFocus()
+        self.txt_nombre.selectAll()
 
     def _eliminar_cliente(self):
         fila = self.tabla.currentRow()
         if fila == -1:
-            QMessageBox.information(self, "Seleccion", "Seleccione un cliente para eliminar.")
+            QMessageBox.information(self, "Selección", "Seleccione un cliente para eliminar.")
             return
         nombre = self.tabla.item(fila, 1).text()
         respuesta = QMessageBox.question(
             self,
-            "Confirmar Eliminacion",
-            f"Desea eliminar al cliente '{nombre}'?",
+            "Confirmar Eliminación",
+            f"¿Desea eliminar al cliente '{nombre}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if respuesta == QMessageBox.StandardButton.Yes:
@@ -353,7 +377,11 @@ class PanelClientes(QWidget):
     def _ver_historial(self):
         fila = self.tabla.currentRow()
         if fila == -1:
-            QMessageBox.information(self, "Seleccion", "Seleccione un cliente para ver su historial.")
+            QMessageBox.information(
+                self,
+                "Selección",
+                "Seleccione un cliente para ver su historial.",
+            )
             return
         id_cliente = int(self.tabla.item(fila, 0).text())
         nombre = self.tabla.item(fila, 1).text()

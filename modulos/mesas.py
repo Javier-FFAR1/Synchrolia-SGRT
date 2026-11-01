@@ -10,8 +10,8 @@ from PySide6.QtWidgets import (
     QFrame, QPushButton, QGridLayout, QGroupBox,
     QScrollArea, QMessageBox, QGraphicsDropShadowEffect
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, Signal, QRectF, QPointF
+from PySide6.QtGui import QFont, QColor, QPainter, QPen
 
 from modulos.almacen_datos import (
     mesas_con_estado, poner_mesa_en_mantenimiento
@@ -26,11 +26,16 @@ NARANJA = "#FF9800"
 GRIS = "#9E9E9E"
 NEUTRO_CLARO = "#F5F5F5"
 
+NOMBRES_ZONA = {
+    "Salon Principal": "Salón Principal",
+    "Area VIP": "Área VIP",
+}
 
-class MesaWidget(QFrame):
+
+class MesaWidget(QWidget):
     """
-    Widget visual que representa una mesa en el mapa.
-    Muestra numero, capacidad y estado con color codificado.
+    Widget visual que representa una mesa vista desde arriba.
+    Dibuja la mesa y sus sillas segun la capacidad, con el color del estado.
     """
     def __init__(self, numero, capacidad, estado, zona, parent=None):
         super().__init__(parent)
@@ -38,6 +43,8 @@ class MesaWidget(QFrame):
         self.capacidad = capacidad
         self.estado = estado
         self.zona = zona
+        self._hover = False
+        self._seleccionada = False
 
         self.colores_estado = {
             "Libre": VERDE,
@@ -46,58 +53,184 @@ class MesaWidget(QFrame):
             "Mantenimiento": GRIS,
         }
 
-        self.setFixedSize(110, 110)
+        self.setFixedSize(148, 148)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._aplicar_estilo(estado)
+        self._actualizar_tooltip()
 
-        # Sombra suave bajo cada mesa
         sombra = QGraphicsDropShadowEffect(self)
-        sombra.setBlurRadius(12)
-        sombra.setOffset(0, 2)
-        sombra.setColor(QColor(0, 0, 0, 60))
+        sombra.setBlurRadius(14)
+        sombra.setOffset(0, 3)
+        sombra.setColor(QColor(0, 0, 0, 45))
         self.setGraphicsEffect(sombra)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    @property
+    def _centro(self):
+        return QPointF(self.width() / 2, 62)
 
-        # Numero de mesa
-        lbl_numero = QLabel(numero)
-        lbl_numero.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_numero.setFont(QFont("Raleway", 18, QFont.Weight.Bold))
-        lbl_numero.setStyleSheet("color: white; background: transparent;")
-        layout.addWidget(lbl_numero)
+    def _color_estado(self):
+        return QColor(self.colores_estado.get(self.estado, GRIS))
 
-        # Capacidad
-        lbl_cap = QLabel(f"{capacidad} personas")
-        lbl_cap.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_cap.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 10px; background: transparent;")
-        layout.addWidget(lbl_cap)
+    def _color_texto(self):
+        if self.estado == "Reservada":
+            return QColor("#3D2600")
+        return QColor("#FFFFFF")
 
-        # Estado
-        self.lbl_estado = QLabel(estado)
-        self.lbl_estado.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_estado.setStyleSheet("color: white; font-size: 10px; font-weight: 600; background: transparent;")
-        layout.addWidget(self.lbl_estado)
-
-    def _aplicar_estilo(self, estado):
-        color = self.colores_estado.get(estado, GRIS)
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {color};
-                border-radius: 12px;
-                border: 2px solid transparent;
-            }}
-            QFrame:hover {{
-                border: 2px solid white;
-            }}
-        """)
+    def _actualizar_tooltip(self):
+        texto_personas = "persona" if self.capacidad == 1 else "personas"
+        self.setToolTip(
+            f"Mesa {self.numero}\n"
+            f"Zona: {NOMBRES_ZONA.get(self.zona, self.zona)}\n"
+            f"Capacidad: {self.capacidad} {texto_personas}\n"
+            f"Estado: {self.estado}\n\n"
+            "Clic para seleccionar"
+        )
 
     def set_estado(self, estado):
-        """Actualiza el color y el texto del estado de la mesa."""
+        """Actualiza el estado y repinta la mesa."""
         self.estado = estado
-        self._aplicar_estilo(estado)
-        self.lbl_estado.setText(estado)
+        self._actualizar_tooltip()
+        self.update()
+
+    def set_seleccionada(self, seleccionada):
+        self._seleccionada = seleccionada
+        self.update()
+
+    def enterEvent(self, event):
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._dibujar_sillas(painter)
+        self._dibujar_mesa(painter)
+        self._dibujar_textos(painter)
+
+        if self._seleccionada:
+            painter.setPen(QPen(QColor(DORADO), 2, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                QRectF(4, 4, self.width() - 8, self.height() - 8),
+                14, 14
+            )
+        painter.end()
+
+    def _dibujar_sillas(self, painter):
+        painter.setPen(QPen(QColor("#AEB7C2"), 1))
+        painter.setBrush(QColor("#E8ECF1"))
+
+        if self.capacidad <= 4:
+            radio_mesa = 34
+            distancia = radio_mesa + 9
+            for indice in range(max(self.capacidad, 1)):
+                angulo = indice * 360 / max(self.capacidad, 1)
+                painter.save()
+                painter.translate(self._centro)
+                painter.rotate(angulo)
+                painter.drawRoundedRect(
+                    QRectF(-7.5, -distancia - 4.5, 15, 9), 3.5, 3.5
+                )
+                painter.restore()
+            return
+
+        ancho, alto = self._dimensiones_mesa()
+        lados = max(self.capacidad - 2, 0)
+        arriba = (lados + 1) // 2
+        abajo = lados // 2
+        self._fila_sillas(
+            painter, arriba, self._centro.y() - alto / 2 - 10, ancho
+        )
+        self._fila_sillas(
+            painter, abajo, self._centro.y() + alto / 2 + 10, ancho
+        )
+
+        for lado in (-1, 1):
+            x = self._centro.x() + lado * (ancho / 2 + 10)
+            painter.drawRoundedRect(
+                QRectF(x - 4.5, self._centro.y() - 9, 9, 18), 3.5, 3.5
+            )
+
+    def _fila_sillas(self, painter, cantidad, y, ancho):
+        if cantidad <= 0:
+            return
+        paso = min(22.0, (ancho - 18) / max(cantidad - 1, 1))
+        inicio = self._centro.x() - (cantidad - 1) * paso / 2
+        for indice in range(cantidad):
+            x = inicio + indice * paso
+            painter.drawRoundedRect(
+                QRectF(x - 7.5, y - 4.5, 15, 9), 3.5, 3.5
+            )
+
+    def _dimensiones_mesa(self):
+        if self.capacidad <= 6:
+            return 90, 56
+        if self.capacidad <= 8:
+            return 96, 58
+        return min(110, 98 + (self.capacidad - 9) * 3), 60
+
+    def _dibujar_mesa(self, painter):
+        color = self._color_estado()
+        borde = QColor("#FFFFFF") if self._hover else color.darker(135)
+        painter.setPen(QPen(borde, 2.5 if self._hover else 2))
+        painter.setBrush(color)
+
+        if self.capacidad <= 4:
+            painter.drawEllipse(self._centro, 34, 34)
+            return
+
+        ancho, alto = self._dimensiones_mesa()
+        painter.drawRoundedRect(
+            QRectF(
+                self._centro.x() - ancho / 2,
+                self._centro.y() - alto / 2,
+                ancho,
+                alto,
+            ),
+            11, 11
+        )
+
+    def _dibujar_textos(self, painter):
+        color_texto = self._color_texto()
+        fuente = QFont("Segoe UI")
+        fuente.setPixelSize(21 if len(self.numero) <= 2 else 17)
+        fuente.setWeight(QFont.Weight.Bold)
+        painter.setFont(fuente)
+        painter.setPen(color_texto)
+        painter.drawText(
+            QRectF(0, self._centro.y() - 23, self.width(), 30),
+            Qt.AlignmentFlag.AlignCenter,
+            self.numero,
+        )
+
+        fuente.setPixelSize(12)
+        fuente.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(fuente)
+        painter.setPen(color_texto)
+        painter.drawText(
+            QRectF(0, self._centro.y() + 8, self.width(), 18),
+            Qt.AlignmentFlag.AlignCenter,
+            f"{self.capacidad} pers.",
+        )
+
+        color_estado = self._color_estado()
+        if self.estado == "Reservada":
+            color_estado = QColor("#9A5B00")
+        fuente_estado = QFont("Raleway")
+        fuente_estado.setPixelSize(13)
+        fuente_estado.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(fuente_estado)
+        painter.setPen(color_estado)
+        painter.drawText(
+            QRectF(0, 122, self.width(), 18),
+            Qt.AlignmentFlag.AlignCenter,
+            self.estado,
+        )
 
 
 class PanelMesas(QWidget):
@@ -115,7 +248,7 @@ class PanelMesas(QWidget):
         layout.setSpacing(12)
 
         # Encabezado
-        lbl_titulo = QLabel("Mapa Visual de Ocupacion")
+        lbl_titulo = QLabel("Mapa Visual de Ocupación")
         lbl_titulo.setObjectName("titulo")
         layout.addWidget(lbl_titulo)
 
@@ -148,7 +281,10 @@ class PanelMesas(QWidget):
             layout_item.addWidget(circulo)
 
             lbl = QLabel(texto)
-            lbl.setStyleSheet("font-size: 12px; color: #555555;")
+            lbl.setStyleSheet(
+                "font-family: 'Raleway', 'Segoe UI', sans-serif; "
+                "font-size: 12px; color: #555555;"
+            )
             layout_item.addWidget(lbl)
 
             layout_leyenda.addLayout(layout_item)
@@ -197,6 +333,7 @@ class PanelMesas(QWidget):
         """(Re)construye el mapa con las mesas y su estado derivado."""
         # Agrupar mesas por zona preservando orden del catalogo
         self.widgets_mesas.clear()
+        self._mesa_seleccionada = None
 
         # Limpiar el contenido previo del scroll
         from PySide6.QtWidgets import QWidget
@@ -207,6 +344,8 @@ class PanelMesas(QWidget):
                 item = layout_anterior.takeAt(0)
                 w = item.widget()
                 if w is not None:
+                    w.hide()
+                    w.setParent(None)
                     w.deleteLater()
                 elif item.layout() is not None:
                     pass
@@ -220,7 +359,8 @@ class PanelMesas(QWidget):
             zonas.setdefault(m["zona"], []).append(m)
 
         for nombre_zona, mesas in zonas.items():
-            grupo = QGroupBox(nombre_zona)
+            nombre_visible = NOMBRES_ZONA.get(nombre_zona, nombre_zona)
+            grupo = QGroupBox(nombre_visible)
             grupo.setStyleSheet(f"""
                 QGroupBox {{
                     background-color: white;
@@ -234,18 +374,21 @@ class PanelMesas(QWidget):
                     left: 16px;
                     padding: 0 8px;
                     color: {PRIMARIO};
+                    font-family: 'Raleway', 'Segoe UI', sans-serif;
                     font-size: 14px;
                     font-weight: 700;
                 }}
             """)
 
             grid = QGridLayout(grupo)
-            grid.setSpacing(12)
+            grid.setSpacing(14)
 
             for i, m in enumerate(mesas):
                 fila = i // 4
                 columna = i % 4
-                widget_mesa = MesaWidget(m["numero"], m["capacidad"], m["estado"], nombre_zona)
+                widget_mesa = MesaWidget(
+                    m["numero"], m["capacidad"], m["estado"], nombre_zona
+                )
                 widget_mesa.mousePressEvent = lambda e, num=m["numero"]: self._seleccionar_mesa(num)
                 grid.addWidget(widget_mesa, fila, columna)
                 self.widgets_mesas[m["numero"]] = widget_mesa
@@ -260,6 +403,8 @@ class PanelMesas(QWidget):
 
     def _seleccionar_mesa(self, numero):
         self._mesa_seleccionada = numero
+        for numero_mesa, widget in self.widgets_mesas.items():
+            widget.set_seleccionada(numero_mesa == numero)
 
     def _refrescar_mapa(self):
         """Recalcula el mapa desde las reservas.
@@ -303,7 +448,7 @@ class PanelMesas(QWidget):
         from PySide6.QtWidgets import QInputDialog
         opcion, ok = QInputDialog.getItem(
             self, "Cambiar Estado Mesa",
-            f"Accion para la mesa {numero}:", opciones, 0, False
+            f"Acción para la mesa {numero}:", opciones, 0, False
         )
         if not ok:
             return

@@ -48,7 +48,8 @@ class EncabezadoModulo(QWidget):
         # Reloj en vivo a la derecha
         self.lbl_fecha = QLabel()
         self.lbl_fecha.setStyleSheet(
-            f"color: {GRIS_MEDIO}; font-size: 12px; font-weight: 600;"
+            f"color: {GRIS_MEDIO}; font-size: 12px; font-weight: 600; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
         )
         self.lbl_fecha.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -57,7 +58,10 @@ class EncabezadoModulo(QWidget):
 
         self.lbl_hora = QLabel()
         self.lbl_hora.setFont(QFont("Raleway", 22, QFont.Weight.Bold))
-        self.lbl_hora.setStyleSheet(f"color: {PRIMARIO};")
+        self.lbl_hora.setStyleSheet(
+            f"color: {PRIMARIO}; font-family: 'Raleway', 'Segoe UI', sans-serif; "
+            "font-size: 22px; font-weight: 700;"
+        )
         self.lbl_hora.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
@@ -76,7 +80,7 @@ class EncabezadoModulo(QWidget):
     @staticmethod
     def _fecha_es(ahora):
         """Retorna la fecha en espanol independiente de la locale del sistema."""
-        dias = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
+        dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
                  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
         dia = dias[ahora.weekday()]

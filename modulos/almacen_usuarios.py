@@ -294,12 +294,12 @@ class AlmacenUsuarios:
             return False, f"El usuario '{usuario}' ya existe."
         if not re.match(r"^[A-Za-z0-9_.-]+$", usuario):
             return False, (
-                "El nombre de usuario solo puede contener letras, numeros, "
+                "El nombre de usuario solo puede contener letras, números, "
                 "puntos, guiones y guiones bajos (sin espacios)."
             )
         if len(contrasena) < LONGITUD_MIN_CONTRASENA:
             return False, (
-                f"La contrasena debe tener al menos "
+                f"La contraseña debe tener al menos "
                 f"{LONGITUD_MIN_CONTRASENA} caracteres."
             )
         if self._insertar_usuario(nombre, usuario, rol, contrasena):
@@ -336,7 +336,7 @@ class AlmacenUsuarios:
         """
         conn = get_conexion()
         if conn is None:
-            return False, "No hay conexion a la base de datos."
+            return False, "No hay conexión a la base de datos."
         try:
             cur = conn.cursor()
             cur.execute(
@@ -348,12 +348,12 @@ class AlmacenUsuarios:
             if fila is None:
                 return False, "Usuario no encontrado."
             if not _verificar_contrasena(contrasena_actual, fila[0]):
-                return False, "La contrasena actual es incorrecta."
+                return False, "La contraseña actual es incorrecta."
             if not nueva_contrasena:
-                return False, "La nueva contrasena no puede estar vacia."
+                return False, "La nueva contraseña no puede estar vacía."
             if len(nueva_contrasena) < LONGITUD_MIN_CONTRASENA:
                 return False, (
-                    f"La contrasena debe tener al menos "
+                    f"La contraseña debe tener al menos "
                     f"{LONGITUD_MIN_CONTRASENA} caracteres."
                 )
             cur = conn.cursor()
@@ -365,7 +365,7 @@ class AlmacenUsuarios:
             cur.close()
             return True, None
         except Error as e:
-            return False, f"Error al cambiar la contrasena: {e}"
+            return False, f"Error al cambiar la contraseña: {e}"
         finally:
             conn.close()
 
