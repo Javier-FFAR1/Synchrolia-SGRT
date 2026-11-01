@@ -139,7 +139,7 @@ def _estilo_tabla():
 def _tabla_kpis(kpis, estilos):
     """Tarjetas de indicadores en una grilla de 3 columnas por 2 filas."""
     datos = [
-        ("Reservas del periodo", kpis["total"], PRIMARIO_HEX),
+        ("Reservas del período", kpis["total"], PRIMARIO_HEX),
         ("Tasa de cancelación", f"{kpis['tasa_cancelacion']}%", ROJO_HEX),
         ("Mesa más solicitada", kpis["mesa_top"], VERDE_HEX),
         ("Horario pico", kpis["horario_pico"], NARANJA_HEX),
@@ -278,7 +278,7 @@ def _tabla_detalle(reservas, estilos):
     else:
         datos.append([
             Paragraph(
-                "No hay reservas registradas para el periodo seleccionado.",
+                "No hay reservas registradas para el período seleccionado.",
                 estilos["celda_centro"],
             )
         ] + [""] * (len(encabezados) - 1))
@@ -322,13 +322,13 @@ def _construir_story(reservas, periodo, kpis, estilos):
         spaceBefore=4, spaceAfter=8,
     ))
     story.append(Paragraph(
-        f"Periodo: <b>{_texto(periodo)}</b> | "
+        f"Período: <b>{_texto(periodo)}</b> | "
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         estilos["cuerpo"],
     ))
     story.append(Spacer(1, 10))
 
-    story.append(Paragraph("Indicadores del periodo", estilos["seccion"]))
+    story.append(Paragraph("Indicadores del período", estilos["seccion"]))
     story.append(_tabla_kpis(kpis, estilos))
     story.append(Spacer(1, 12))
 

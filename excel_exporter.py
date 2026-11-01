@@ -124,7 +124,7 @@ def _celda(
 
 def _subtitulo(periodo):
     generado = datetime.now().strftime("%d/%m/%Y %H:%M")
-    return f"Periodo: {periodo} | Generado: {generado}"
+    return f"Período: {periodo} | Generado: {generado}"
 
 
 def _preparar_titulo(ws, titulo, subtitulo, ultima_columna):
@@ -322,7 +322,7 @@ def _hoja_detalle(wb, reservas, periodo):
             row=fila,
             column=1,
             value=(
-                "No hay reservas registradas para el periodo seleccionado."
+                "No hay reservas registradas para el período seleccionado."
             ),
         )
         celda.font = _fuente(tamano=10, color=GRIS, cursiva=True)
@@ -367,7 +367,7 @@ def _hoja_resumen(wb, reservas, periodo, total_mesas):
     total_columnas = 9
     _preparar_titulo(
         ws,
-        "Synchrolia SGRT - Resumen del Periodo",
+        "Synchrolia SGRT - Resumen del Período",
         _subtitulo(periodo),
         total_columnas,
     )
@@ -377,7 +377,7 @@ def _hoja_resumen(wb, reservas, periodo, total_mesas):
     top = top_mesas(reservas)
     estados = resumen_estados(reservas)
 
-    _titulo_seccion(ws, 4, 1, 2, "Indicadores del periodo")
+    _titulo_seccion(ws, 4, 1, 2, "Indicadores del período")
     _titulo_seccion(ws, 4, 4, 5, "Reservas por día")
     _titulo_seccion(ws, 4, 7, 9, "Top mesas más solicitadas")
 
@@ -386,7 +386,7 @@ def _hoja_resumen(wb, reservas, periodo, total_mesas):
     _encabezados(ws, 5, 7, ["#", "Mesa", "Reservas"])
 
     filas_kpi = [
-        ("Reservas del periodo", kpis["total"], PRIMARIO),
+        ("Reservas del período", kpis["total"], PRIMARIO),
         ("Tasa de cancelación", f"{kpis['tasa_cancelacion']}%", "C62828"),
         ("Mesa más solicitada", kpis["mesa_top"], "2E7D32"),
         ("Horario pico", kpis["horario_pico"], "E65100"),
@@ -490,7 +490,7 @@ def exportar_reservas_excel(
     wb = Workbook()
     wb.properties.creator = "Synchrolia SGRT"
     wb.properties.title = "Reporte de Reservas"
-    wb.properties.subject = f"Periodo: {periodo}"
+    wb.properties.subject = f"Período: {periodo}"
 
     _hoja_resumen(wb, reservas, periodo, total_mesas)
     _hoja_detalle(wb, reservas, periodo)

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QFileDialog
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 
 from modulos.almacen_datos import (
     reportes_kpis, reportes_dias, reportes_top_mesas
@@ -45,15 +45,19 @@ class PanelReportes(QWidget):
         layout.setSpacing(12)
 
         # Encabezado
-        lbl_titulo = QLabel("Reportes y Estadisticas")
+        lbl_titulo = QLabel("Reportes y Estadísticas")
         lbl_titulo.setObjectName("titulo")
         layout.addWidget(lbl_titulo)
+
+        lbl_sub = QLabel("Indicadores de reservas y ocupación del restaurante")
+        lbl_sub.setObjectName("subtitulo")
+        layout.addWidget(lbl_sub)
 
         # Filtros
         layout_filtros = QHBoxLayout()
         layout_filtros.setSpacing(12)
 
-        lbl_filtro = QLabel("Periodo:")
+        lbl_filtro = QLabel("Período:")
         lbl_filtro.setStyleSheet("font-weight: 600;")
         layout_filtros.addWidget(lbl_filtro)
 
@@ -70,13 +74,13 @@ class PanelReportes(QWidget):
         layout_filtros.addWidget(btn_generar)
 
         btn_exportar = QPushButton("Exportar PDF")
-        btn_exportar.setObjectName("acento")
+        btn_exportar.setObjectName("secundario")
         btn_exportar.setMinimumHeight(36)
         btn_exportar.clicked.connect(self._exportar_pdf)
         layout_filtros.addWidget(btn_exportar)
 
         btn_excel = QPushButton("Exportar Excel")
-        btn_excel.setObjectName("exito")
+        btn_excel.setObjectName("secundario")
         btn_excel.setMinimumHeight(36)
         btn_excel.clicked.connect(self._exportar_excel)
         layout_filtros.addWidget(btn_excel)
@@ -92,12 +96,12 @@ class PanelReportes(QWidget):
         self.medidores_kpi = {}
         self.labels_titulo = {}
         kpis = [
-            ("Reservas Semana", "reservas_semana", SECUNDARIO),
-            ("Tasa Cancelacion", "tasa_cancelacion", ROJO),
-            ("Mesa Top", "mesa_top", VERDE),
+            ("Reservas de la Semana", "reservas_semana", SECUNDARIO),
+            ("Tasa de Cancelación", "tasa_cancelacion", ROJO),
+            ("Mesa Más Solicitada", "mesa_top", VERDE),
             ("Horario Pico", "horario_pico", NARANJA),
-            ("Ocupacion Promedio", "ocupacion_promedio", DORADO),
-            ("Clientes Frecuentes", "clientes_frecuentes", PRIMARIO),
+            ("Ocupación Promedio", "ocupacion_promedio", DORADO),
+            ("Clientes Únicos", "clientes_frecuentes", PRIMARIO),
         ]
 
         for i, (titulo, clave, color) in enumerate(kpis):
@@ -106,10 +110,11 @@ class PanelReportes(QWidget):
 
             tarjeta = QFrame()
             tarjeta.setObjectName("tarjeta")
-            tarjeta.setMinimumHeight(100)
+            tarjeta.setFixedHeight(136)
 
             layout_tarjeta = QVBoxLayout(tarjeta)
-            layout_tarjeta.setContentsMargins(12, 10, 12, 10)
+            layout_tarjeta.setContentsMargins(14, 10, 14, 10)
+            layout_tarjeta.setSpacing(6)
             layout_tarjeta.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
             barra = QFrame()
@@ -117,37 +122,31 @@ class PanelReportes(QWidget):
             barra.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
             layout_tarjeta.addWidget(barra)
 
-            if clave in KPI_PORCENTAJE:
-                # KPI porcentual: numero grande + barra de progreso
-                tarjeta.setMinimumHeight(170)
-                lbl_valor = QLabel("-")
-                lbl_valor.setFont(QFont("Raleway", 26, QFont.Weight.Bold))
-                if not lbl_valor.font().exactMatch():
-                    lbl_valor.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
-                lbl_valor.setStyleSheet(f"color: {color};")
-                lbl_valor.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout_tarjeta.addWidget(lbl_valor)
-                self.labels_kpi[clave] = lbl_valor
+            lbl_valor = QLabel("-")
+            lbl_valor.setStyleSheet(
+                f"color: {color}; font-family: 'Segoe UI', sans-serif; "
+                "font-size: 32px; font-weight: 700; background: transparent;"
+            )
+            lbl_valor.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout_tarjeta.addWidget(lbl_valor)
+            self.labels_kpi[clave] = lbl_valor
 
-                barra = BarraProgreso(color, altura=12)
-                layout_tarjeta.addWidget(barra)
-                self.medidores_kpi[clave] = barra
-            else:
-                lbl_valor = QLabel("-")
-                lbl_valor.setFont(QFont("Raleway", 28, QFont.Weight.Bold))
-                if not lbl_valor.font().exactMatch():
-                    lbl_valor.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
-                lbl_valor.setStyleSheet(f"color: {color};")
-                layout_tarjeta.addWidget(lbl_valor)
-                self.labels_kpi[clave] = lbl_valor
+            if clave in KPI_PORCENTAJE:
+                barra_progreso = BarraProgreso(color, altura=10)
+                layout_tarjeta.addWidget(barra_progreso)
+                self.medidores_kpi[clave] = barra_progreso
 
             lbl_kpi = QLabel(titulo)
-            lbl_kpi.setStyleSheet("color: #888888; font-size: 11px;")
+            lbl_kpi.setStyleSheet(
+                "color: #6B7280; font-size: 11px; font-weight: 600; "
+                "font-family: 'Segoe UI', sans-serif;"
+            )
             lbl_kpi.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout_tarjeta.addWidget(lbl_kpi)
             self.labels_titulo[clave] = lbl_kpi
 
             grid_kpi.addWidget(tarjeta, fila, columna)
+            grid_kpi.setColumnStretch(columna, 1)
 
         layout.addLayout(grid_kpi)
 
@@ -158,43 +157,65 @@ class PanelReportes(QWidget):
         # Izquierda: Reservas por dia
         layout_izq = QVBoxLayout()
 
-        lbl_res_dia = QLabel("Reservas por Dia")
-        lbl_res_dia.setStyleSheet(f"color: {PRIMARIO}; font-size: 14px; font-weight: 700;")
+        lbl_res_dia = QLabel("Reservas por Día")
+        lbl_res_dia.setStyleSheet(
+            f"color: {PRIMARIO}; font-size: 15px; font-weight: 700; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
+        )
         layout_izq.addWidget(lbl_res_dia)
 
         self.tabla_dias = QTableWidget()
         self.tabla_dias.setColumnCount(2)
-        self.tabla_dias.setHorizontalHeaderLabels(["Dia", "Reservas"])
+        self.tabla_dias.setHorizontalHeaderLabels(["Día", "Reservas"])
         self.tabla_dias.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        for columna in range(self.tabla_dias.columnCount()):
+            item = self.tabla_dias.horizontalHeaderItem(columna)
+            if item is not None:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+                )
         self.tabla_dias.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tabla_dias.verticalHeader().setVisible(False)
+        self.tabla_dias.verticalHeader().setDefaultSectionSize(36)
+        self.tabla_dias.setAlternatingRowColors(True)
         self.tabla_dias.setRowCount(7)
 
-        layout_izq.addWidget(self.tabla_dias)
-
-        layout_tablas.addLayout(layout_izq)
+        layout_izq.addWidget(self.tabla_dias, 1)
+        layout_tablas.addLayout(layout_izq, 1)
 
         # Derecha: Top mesas
         layout_der = QVBoxLayout()
 
-        lbl_top = QLabel("Top Mesas Mas Solicitadas")
-        lbl_top.setStyleSheet(f"color: {PRIMARIO}; font-size: 14px; font-weight: 700;")
+        lbl_top = QLabel("Top Mesas Más Solicitadas")
+        lbl_top.setStyleSheet(
+            f"color: {PRIMARIO}; font-size: 15px; font-weight: 700; "
+            "font-family: 'Raleway', 'Segoe UI', sans-serif;"
+        )
         layout_der.addWidget(lbl_top)
 
         self.tabla_top = QTableWidget()
         self.tabla_top.setColumnCount(3)
-        self.tabla_top.setHorizontalHeaderLabels(["Posicion", "Mesa", "Reservas"])
-        self.tabla_top.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tabla_top.setHorizontalHeaderLabels(["Posición", "Mesa", "Reservas"])
+        header_top = self.tabla_top.horizontalHeader()
+        header_top.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header_top.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header_top.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        for columna in range(self.tabla_top.columnCount()):
+            item = self.tabla_top.horizontalHeaderItem(columna)
+            if item is not None:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+                )
         self.tabla_top.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tabla_top.verticalHeader().setVisible(False)
+        self.tabla_top.verticalHeader().setDefaultSectionSize(36)
+        self.tabla_top.setAlternatingRowColors(True)
         self.tabla_top.setRowCount(0)
 
-        layout_der.addWidget(self.tabla_top)
+        layout_der.addWidget(self.tabla_top, 1)
+        layout_tablas.addLayout(layout_der, 1)
 
-        layout_tablas.addLayout(layout_der)
-
-        layout.addLayout(layout_tablas)
-        layout.addStretch()
+        layout.addLayout(layout_tablas, 1)
 
     def _actualizar_reporte(self):
         """Recalcula KPIs, reservas por dia y top mesas desde el almacen."""
@@ -203,9 +224,9 @@ class PanelReportes(QWidget):
 
         # El KPI de reservas adapta su titulo al periodo filtrado
         titulos_reservas = {
-            "Hoy": "Reservas Hoy",
-            "Esta Semana": "Reservas Esta Semana",
-            "Este Mes": "Reservas Este Mes",
+            "Hoy": "Reservas de Hoy",
+            "Esta Semana": "Reservas de la Semana",
+            "Este Mes": "Reservas del Mes",
             "Todos": "Reservas Totales",
         }
         self.labels_titulo["reservas_semana"].setText(
@@ -225,16 +246,21 @@ class PanelReportes(QWidget):
         # Reservas por dia
         dias = reportes_dias(periodo)
         orden = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
+        etiquetas_dias = {"Miercoles": "Miércoles", "Sabado": "Sábado"}
+        fuente_numero = QFont("Segoe UI")
+        fuente_numero.setPixelSize(13)
+        fuente_numero.setWeight(QFont.Weight.Bold)
+
         self.tabla_dias.setRowCount(0)
         self.tabla_dias.setRowCount(len(orden))
         for fila, dia in enumerate(orden):
-            item_dia = QTableWidgetItem(dia)
+            item_dia = QTableWidgetItem(etiquetas_dias.get(dia, dia))
             item_dia.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.tabla_dias.setItem(fila, 0, item_dia)
 
             item_total = QTableWidgetItem(str(dias[dia]))
             item_total.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            item_total.setFont(QFont("Raleway", 12, QFont.Weight.Bold))
+            item_total.setFont(fuente_numero)
             self.tabla_dias.setItem(fila, 1, item_total)
 
         # Top mesas
@@ -250,8 +276,9 @@ class PanelReportes(QWidget):
             item_total.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
 
             if fila == 0:
-                item_pos.setForeground(Qt.GlobalColor.yellow)
-                item_pos.setFont(QFont("Raleway", 12, QFont.Weight.Bold))
+                for item in (item_pos, item_mesa, item_total):
+                    item.setForeground(QColor("#8A6D1F"))
+                    item.setFont(fuente_numero)
 
             self.tabla_top.setItem(fila, 0, item_pos)
             self.tabla_top.setItem(fila, 1, item_mesa)
@@ -263,8 +290,8 @@ class PanelReportes(QWidget):
         QMessageBox.information(
             self,
             "Reporte Generado",
-            f"Reporte del periodo '{self.cmb_periodo.currentText()}' actualizado "
-            "con la informacion actual."
+            f"Reporte del período '{self.cmb_periodo.currentText()}' actualizado "
+            "con la información actual."
         )
 
     def _exportar_pdf(self):
@@ -281,8 +308,8 @@ class PanelReportes(QWidget):
         except ImportError:
             QMessageBox.information(
                 self, "Exportar PDF",
-                "La libreria 'reportlab' no esta instalada. "
-                "Instalela con: pip install reportlab"
+                "La librería 'reportlab' no está instalada. "
+                "Instálela con: pip install reportlab"
             )
             return
         except Exception as error:
@@ -312,8 +339,8 @@ class PanelReportes(QWidget):
         except ImportError:
             QMessageBox.information(
                 self, "Exportar Excel",
-                "La libreria 'openpyxl' no esta instalada. "
-                "Instalela con: pip install openpyxl"
+                "La librería 'openpyxl' no está instalada. "
+                "Instálela con: pip install openpyxl"
             )
             return
         except Exception as error:
