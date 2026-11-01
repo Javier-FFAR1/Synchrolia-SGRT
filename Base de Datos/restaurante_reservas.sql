@@ -1,3 +1,10 @@
+-- ============================================================
+-- SYNCHROLIA - Script final de base de datos
+-- Incluye tablas, datos iniciales, 6 triggers, 2 procedimientos y vistas.
+-- ============================================================
+
+SET NAMES utf8mb4;
+
 DROP DATABASE IF EXISTS restaurante_reservas;
 CREATE DATABASE restaurante_reservas
     CHARACTER SET utf8mb4
@@ -147,6 +154,18 @@ CREATE TABLE historial_reservas (
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario)
 );
 
+CREATE TABLE notificaciones_enviadas (
+    id_notificacion INT AUTO_INCREMENT PRIMARY KEY,
+    id_reserva INT NOT NULL,
+    tipo VARCHAR(20) NOT NULL,
+    correo VARCHAR(100) NOT NULL,
+    enviado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notificacion_reserva (id_reserva, tipo),
+    CONSTRAINT fk_notificacion_reserva
+        FOREIGN KEY (id_reserva) REFERENCES reservas(id_reserva)
+        ON DELETE CASCADE
+);
+
 
 -- 3. DATOS INICIALES (catálogos, roles, permisos y configuración base)
 
@@ -198,6 +217,7 @@ INSERT INTO dias_festivos (fecha, descripcion, accion) VALUES
 INSERT INTO configuracion_general (clave, valor, descripcion) VALUES
     ('duracion_estandar_reserva_min', '90', 'Duración estándar de una reserva en minutos'),
     ('tiempo_tolerancia_min', '15', 'Minutos de tolerancia para la llegada del cliente'),
+    ('minutos_limite_confirmacion', '120', 'Minutos antes del inicio para confirmar una reserva pendiente'),
     ('max_personas_por_reserva', '20', 'Máximo de personas permitido por reserva'),
     ('notif_email_confirmacion', '1', 'Enviar confirmación de reserva por correo'),
     ('notif_recordatorio', '0', 'Enviar recordatorio 1 hora antes de la reserva');
