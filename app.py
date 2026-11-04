@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Synchrolia SGRT - Punto de entrada de la aplicacion
-Ejecuta este archivo para iniciar el sistema.
-"""
 
 import sys
 from PySide6.QtWidgets import QApplication

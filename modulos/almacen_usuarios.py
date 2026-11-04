@@ -51,6 +51,14 @@ def _verificar_contrasena(contrasena, hash_guardado):
 
 
 LONGITUD_MIN_CONTRASENA = 6
+LONGITUD_MAX_USUARIO = 50
+
+
+def _usuario_archivado(nombre_usuario, id_usuario):
+    """Genera un nombre unico para una cuenta desactivada."""
+    sufijo = f"_eliminado_{id_usuario}"
+    base = nombre_usuario[:LONGITUD_MAX_USUARIO - len(sufijo)]
+    return f"{base}{sufijo}"
 
 
 def _id_rol_de(nombre_rol):
@@ -288,8 +296,11 @@ class AlmacenUsuarios:
             return False, "Debe completar todos los campos."
         if len(nombre) > 100:
             return False, "El nombre completo no puede superar 100 caracteres."
-        if len(usuario) > 50:
-            return False, "El nombre de usuario no puede superar 50 caracteres."
+        if len(usuario) > LONGITUD_MAX_USUARIO:
+            return False, (
+                f"El nombre de usuario no puede superar "
+                f"{LONGITUD_MAX_USUARIO} caracteres."
+            )
         if self.existe(usuario):
             return False, f"El usuario '{usuario}' ya existe."
         if not re.match(r"^[A-Za-z0-9_.-]+$", usuario):
@@ -369,14 +380,50 @@ class AlmacenUsuarios:
         finally:
             conn.close()
 
+    def es_ultimo_admin(self, nombre_usuario):
+        """Indica si el usuario es el unico administrador activo del sistema."""
+        conn = get_conexion()
+        if conn is None:
+            return False
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """SELECT r.nombre_rol, u.activo
+                   FROM usuarios u
+                   JOIN roles r ON u.id_rol = r.id_rol
+                   WHERE u.nombre_usuario = %s""",
+                (nombre_usuario,),
+            )
+            fila = cur.fetchone()
+            if not fila or fila[0] != "Administrador" or not fila[1]:
+                cur.close()
+                return False
+            cur.execute(
+                """SELECT COUNT(*)
+                   FROM usuarios u
+                   JOIN roles r ON u.id_rol = r.id_rol
+                   WHERE r.nombre_rol = 'Administrador'
+                     AND u.activo = TRUE"""
+            )
+            total = cur.fetchone()[0]
+            cur.close()
+            return total <= 1
+        except Error:
+            return False
+        finally:
+            conn.close()
+
     def eliminar(self, nombre_usuario):
         """
         Elimina la cuenta de un usuario. Devuelve bool.
 
         Con MySQL, si el usuario tiene reservas o auditoria vinculada, la FK
-        impide el borrado fisico; en ese caso se desactiva (activo = FALSE),
-        lo que preserva la trazabilidad. Si no tiene vinculos, se borra.
+        impide el borrado fisico; en ese caso se desactiva (activo = FALSE) y
+        se renombra la cuenta para liberar el nombre de usuario. Si no tiene
+        vinculos, se borra.
         """
+        if self.es_ultimo_admin(nombre_usuario):
+            return False
         conn = get_conexion()
         if conn is None:
             return False
@@ -406,10 +453,12 @@ class AlmacenUsuarios:
                 reservas = cur.fetchone()[0]
 
             if reservas > 0:
-                # Desactivar (logico) para preservar historia
+                # Desactivar (logico) y liberar el nombre de usuario
                 cur.execute(
-                    "UPDATE usuarios SET activo = FALSE WHERE id_usuario = %s",
-                    (id_usuario,),
+                    """UPDATE usuarios
+                       SET activo = FALSE, nombre_usuario = %s
+                       WHERE id_usuario = %s""",
+                    (_usuario_archivado(nombre_usuario, id_usuario), id_usuario),
                 )
             else:
                 cur.execute(

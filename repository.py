@@ -63,7 +63,12 @@ class FestivoRepository:
                 return False
 
     @staticmethod
-    def actualizar(fecha: date, descripcion: str, accion: str) -> bool:
+    def actualizar(
+        fecha: date,
+        descripcion: str,
+        accion: str,
+        nueva_fecha: Optional[date] = None,
+    ) -> bool:
         """Actualiza un festivo existente (Update con dirty tracking)."""
         with SessionLocal() as session:
             try:
@@ -73,6 +78,8 @@ class FestivoRepository:
                     return False
                 festivo.descripcion = descripcion
                 festivo.accion = accion
+                if nueva_fecha is not None and nueva_fecha != fecha:
+                    festivo.fecha = nueva_fecha
                 session.commit()
                 return True
             except SQLAlchemyError as error:
@@ -156,3 +163,4 @@ class MesaRepository:
         """Devuelve el total de mesas registradas en el restaurante."""
         with SessionLocal() as session:
             return session.scalar(select(func.count()).select_from(MesaModel)) or 0
+

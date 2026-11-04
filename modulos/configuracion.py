@@ -392,17 +392,7 @@ class PanelConfiguracion(QWidget):
         self.tabla_festivos.verticalHeader().setDefaultSectionSize(36)
         self.tabla_festivos.setAlternatingRowColors(True)
 
-        festivos = [
-            (f["fecha"], f["descripcion"], f["accion"])
-            for f in almacen_config.obtener_festivos()
-        ]
-
-        self.tabla_festivos.setRowCount(len(festivos))
-        for fila, (fecha, desc, accion) in enumerate(festivos):
-            for col, valor in enumerate([fecha, desc, accion]):
-                item = QTableWidgetItem(valor)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.tabla_festivos.setItem(fila, col, item)
+        self._cargar_festivos()
 
         layout_festivos.addWidget(self.tabla_festivos, 1)
 
@@ -415,6 +405,13 @@ class PanelConfiguracion(QWidget):
         btn_agregar_festivo.setMinimumWidth(160)
         btn_agregar_festivo.clicked.connect(self._agregar_festivo)
         layout_accion_festivo.addWidget(btn_agregar_festivo)
+
+        btn_editar_festivo = QPushButton("Editar Seleccionado")
+        btn_editar_festivo.setObjectName("secundario")
+        btn_editar_festivo.setMinimumHeight(36)
+        btn_editar_festivo.setMinimumWidth(160)
+        btn_editar_festivo.clicked.connect(self._editar_festivo)
+        layout_accion_festivo.addWidget(btn_editar_festivo)
 
         layout_accion_festivo.addStretch()
 
@@ -886,6 +883,19 @@ class PanelConfiguracion(QWidget):
             f"({guardados} días configurados)."
         )
 
+    def _cargar_festivos(self):
+        """Carga los festivos desde la base de datos en la tabla."""
+        festivos = [
+            (f["fecha"], f["descripcion"], f["accion"])
+            for f in almacen_config.obtener_festivos()
+        ]
+        self.tabla_festivos.setRowCount(len(festivos))
+        for fila, (fecha, desc, accion) in enumerate(festivos):
+            for col, valor in enumerate([fecha, desc, accion]):
+                item = QTableWidgetItem(valor)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.tabla_festivos.setItem(fila, col, item)
+
     def _agregar_festivo(self):
         """Agrega un nuevo dia festivo a la tabla."""
         fecha, ok = QInputDialog.getText(self, "Agregar Festivo", "Fecha (DD/MM/AAAA):")
@@ -902,22 +912,61 @@ class PanelConfiguracion(QWidget):
         )
         if not ok3:
             return
-        fila = self.tabla_festivos.rowCount()
-        self.tabla_festivos.insertRow(fila)
-        for col, valor in enumerate([fecha.strip(), descripcion.strip(), accion]):
-            item = QTableWidgetItem(valor)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.tabla_festivos.setItem(fila, col, item)
         valido, error = almacen_config.agregar_festivo(
             fecha.strip(), descripcion.strip(), accion
         )
         if not valido:
             QMessageBox.warning(self, "No se pudo agregar", error)
-            self.tabla_festivos.removeRow(fila)
             return
+        self._cargar_festivos()
         QMessageBox.information(
             self, "Festivo Agregado",
             f"Festivo '{descripcion}' ({fecha}) agregado correctamente."
+        )
+
+    def _editar_festivo(self):
+        """Actualiza la fecha, descripcion o accion del festivo seleccionado."""
+        fila = self.tabla_festivos.currentRow()
+        if fila == -1:
+            QMessageBox.information(
+                self, "Selección", "Seleccione un festivo para editar."
+            )
+            return
+        fecha_actual = self.tabla_festivos.item(fila, 0).text()
+        desc_actual = self.tabla_festivos.item(fila, 1).text()
+        accion_actual = self.tabla_festivos.item(fila, 2).text()
+
+        fecha, ok = QInputDialog.getText(
+            self, "Editar Festivo", "Fecha (DD/MM/AAAA):",
+            QLineEdit.EchoMode.Normal, fecha_actual
+        )
+        if not ok or not fecha.strip():
+            return
+        descripcion, ok2 = QInputDialog.getText(
+            self, "Editar Festivo", "Descripción:",
+            QLineEdit.EchoMode.Normal, desc_actual
+        )
+        if not ok2:
+            return
+        if not descripcion.strip():
+            descripcion = "Festivo"
+        acciones = ["Cerrado", "Horario Especial"]
+        indice = acciones.index(accion_actual) if accion_actual in acciones else 0
+        accion, ok3 = QInputDialog.getItem(
+            self, "Editar Festivo", "Acción:", acciones, indice, False
+        )
+        if not ok3:
+            return
+        valido, error = almacen_config.actualizar_festivo(
+            fecha_actual, fecha.strip(), descripcion.strip(), accion
+        )
+        if not valido:
+            QMessageBox.warning(self, "No se pudo editar", error)
+            return
+        self._cargar_festivos()
+        QMessageBox.information(
+            self, "Festivo Actualizado",
+            f"Festivo del {fecha.strip()} actualizado correctamente."
         )
 
     def _eliminar_festivo(self):
@@ -936,8 +985,13 @@ class PanelConfiguracion(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if respuesta == QMessageBox.StandardButton.Yes:
-            self.tabla_festivos.removeRow(fila)
-            almacen_config.eliminar_festivo(fecha)
+            if not almacen_config.eliminar_festivo(fecha):
+                QMessageBox.warning(
+                    self, "No se pudo eliminar",
+                    "No se pudo eliminar el festivo seleccionado."
+                )
+                return
+            self._cargar_festivos()
             QMessageBox.information(
                 self, "Eliminado", f"Festivo del {fecha} eliminado."
             )
@@ -1047,6 +1101,13 @@ class PanelConfiguracion(QWidget):
                 "Para eliminarlo, ingrese con otra cuenta."
             )
             return
+        if almacen_usuarios.es_ultimo_admin(usuario):
+            QMessageBox.warning(
+                self, "Acción no permitida",
+                "No puede eliminar al último administrador activo.\n"
+                "Registre otro administrador antes de eliminar esta cuenta."
+            )
+            return
         respuesta = QMessageBox.question(
             self,
             "Confirmar Eliminación",
@@ -1054,7 +1115,12 @@ class PanelConfiguracion(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if respuesta == QMessageBox.StandardButton.Yes:
-            almacen_usuarios.eliminar(usuario)
+            if not almacen_usuarios.eliminar(usuario):
+                QMessageBox.warning(
+                    self, "No se pudo eliminar",
+                    "No fue posible eliminar al usuario seleccionado."
+                )
+                return
             self._cargar_usuarios()
             QMessageBox.information(
                 self, "Eliminado", f"Usuario '{usuario}' eliminado."

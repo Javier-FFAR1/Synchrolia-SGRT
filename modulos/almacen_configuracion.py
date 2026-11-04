@@ -376,6 +376,38 @@ class AlmacenConfiguracion:
         except SQLAlchemyError as e:
             return False, f"Error al agregar el festivo: {e}"
 
+    def actualizar_festivo(self, fecha_original, fecha_nueva, descripcion, accion):
+        """Actualiza un festivo existente. Devuelve (True, None) o (False, error)."""
+        fecha_original = fecha_original.strip()
+        fecha_nueva = fecha_nueva.strip()
+        if not self._fecha_valida(fecha_original) or not self._fecha_valida(
+            fecha_nueva
+        ):
+            return False, "La fecha debe tener el formato DD/MM/AAAA y ser una fecha real."
+        dia, mes, anio = (int(p) for p in fecha_original.split("/"))
+        original_bd = datetime.date(anio, mes, dia)
+        dia, mes, anio = (int(p) for p in fecha_nueva.split("/"))
+        nueva_bd = datetime.date(anio, mes, dia)
+        if nueva_bd != original_bd:
+            if nueva_bd < datetime.date.today():
+                return False, (
+                    "No se puede mover un festivo a una fecha pasada.\n"
+                    "Use la fecha de hoy o una fecha futura."
+                )
+            if FestivoRepository.existe(nueva_bd):
+                return False, f"Ya existe un festivo el {fecha_nueva}."
+        try:
+            if FestivoRepository.actualizar(
+                original_bd,
+                descripcion.strip() or "Festivo",
+                accion,
+                nueva_bd,
+            ):
+                return True, None
+            return False, "No se encontró el festivo seleccionado."
+        except SQLAlchemyError as e:
+            return False, f"Error al actualizar el festivo: {e}"
+
     @staticmethod
     def _fecha_valida(fecha):
         """Valida que la fecha sea real con formato DD/MM/AAAA."""

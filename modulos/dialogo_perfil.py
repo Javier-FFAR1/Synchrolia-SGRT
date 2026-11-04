@@ -492,6 +492,17 @@ class DialogoPerfil(QDialog):
 
     def _eliminar_cuenta(self):
         """Elimina la cuenta del usuario logueado tras confirmar."""
+        if self._datos.get("rol") == "Administrador":
+            aviso(
+                self,
+                "Acción no permitida",
+                "Las cuentas de administrador no pueden eliminarse desde el "
+                "perfil, para evitar que el sistema quede sin acceso "
+                "administrativo.",
+                icono=QMessageBox.Icon.Warning,
+                claro=True
+            )
+            return
         respuesta = aviso(
             self,
             "Eliminar cuenta",
